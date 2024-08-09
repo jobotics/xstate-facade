@@ -1,0 +1,25 @@
+{
+  "name": "aurora-statooor",
+  "version": "1.0.0",
+  "description": "",
+  "main": "src/index.js",
+  "scripts": {
+    "test": "vitest",
+    "test:ui": "vitest --ui",
+    "test:run": "vitest run",
+    "format": "prettier --write 'machine/*.ts'"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "xstate": "^5.17.1"
+  },
+  "devDependencies": {
+    "@vitest/ui": "^2.0.5",
+    "prettier": "^3.3.3",
+    "typescript": "^5.5.4",
+    "vitest": "^2.0.5"
+  },
+  "packageManager": "pnpm@8.6.8+sha512.3adac245413b56a4722a5cbd13781f1316473801ed143a66ba5c9514aae7977bff9f6c4972476e795ba6589a94039147c5c44ffd3e36afc3fc083afd76e3cff7"
+}
