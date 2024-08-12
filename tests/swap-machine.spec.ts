@@ -54,7 +54,7 @@ describe("swapMachine", () => {
     actor.stop();
   });
 
-  it("should set intent context correctly", () => {
+  it("should handle input and set intents", () => {
     const actor = createActor(swapMachine).start();
 
     // Act: Set intent
@@ -72,7 +72,7 @@ describe("swapMachine", () => {
     // Assert: Check context
     const snapshot = actor.getSnapshot();
     expect(snapshot.context.current).toBe("1");
-    expect(snapshot.context.intents["1"]).toEqual({
+    expect(snapshot.context.intents["1"]).toMatchObject({
       intentID: "1",
       assetIn: "ETH",
       assetOut: "USDT",
@@ -96,51 +96,6 @@ describe("swapMachine", () => {
     await sleep(200);
     const snapshot = actor.getSnapshot();
     expect(snapshot.context.intents["0"].state).toBe(SwapProgress.Quoted);
-
-    actor.stop();
-  });
-
-  it("should periodically refetch quotes", async () => {
-    const actor = createActor(swapMachine).start();
-    let quoteFoundCount = 0;
-
-    actor.subscribe((state) => {
-      if (state.context.intents["0"].state === SwapProgress.Quoted) {
-        quoteFoundCount++;
-      }
-    });
-
-    // Act: Wait for two quote fetch cycles
-    await sleep(5500);
-
-    // Assert: Ensure two quote fetches occurred
-    expect(quoteFoundCount).toBeGreaterThanOrEqual(2);
-
-    actor.stop();
-  }, 6000);
-
-  it("should refetch quotes on failure", async () => {
-    const actor = createActor(
-      swapMachine.provide({
-        actors: {
-          fetchQuotes: fromPromise(() => Promise.reject({ result: false })),
-        },
-      }),
-    ).start();
-
-    let pollingCount = 0;
-
-    actor.subscribe((state) => {
-      if (state.context.intents["0"].state === SwapProgress.Quoting) {
-        pollingCount++;
-      }
-    });
-
-    // Act: Wait for a polling cycle
-    await sleep(750);
-
-    // Assert: Ensure polling reoccurred after failure
-    expect(pollingCount).toBeGreaterThanOrEqual(1);
 
     actor.stop();
   });
@@ -255,6 +210,51 @@ describe("swapMachine", () => {
     // Assert: Ensure final state is Confirmed
     const snapshot = actor.getSnapshot();
     expect(snapshot.context.intents["0"].state).toBe(SwapProgress.Confirmed);
+
+    actor.stop();
+  });
+
+  it("should periodically refetch quotes", async () => {
+    const actor = createActor(swapMachine).start();
+    let quoteFoundCount = 0;
+
+    actor.subscribe((state) => {
+      if (state.context.intents["0"].state === SwapProgress.Quoted) {
+        quoteFoundCount++;
+      }
+    });
+
+    // Act: Wait for two quote fetch cycles
+    await sleep(5500);
+
+    // Assert: Ensure two quote fetches occurred
+    expect(quoteFoundCount).toBeGreaterThanOrEqual(2);
+
+    actor.stop();
+  }, 6000);
+
+  it("should refetch quotes on failure", async () => {
+    const actor = createActor(
+      swapMachine.provide({
+        actors: {
+          fetchQuotes: fromPromise(() => Promise.reject({ result: false })),
+        },
+      }),
+    ).start();
+
+    let pollingCount = 0;
+
+    actor.subscribe((state) => {
+      if (state.context.intents["0"].state === SwapProgress.Quoting) {
+        pollingCount++;
+      }
+    });
+
+    // Act: Wait for a polling cycle
+    await sleep(750);
+
+    // Assert: Ensure polling reoccurred after failure
+    expect(pollingCount).toBeGreaterThanOrEqual(1);
 
     actor.stop();
   });

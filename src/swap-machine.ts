@@ -213,29 +213,27 @@ export const swapMachine = setup({
           },
         },
         input: {
-          initial: "listening",
-          states: {
-            listening: {
-              on: {
-                SUBMIT_SWAP: {
-                  target: "#swapMachine.Submitting",
-                  guard: "hasValidQuote",
+          on: {
+            SUBMIT_SWAP: {
+              target: "#swapMachine.Submitting",
+              guard: "hasValidQuote",
+            },
+            SET_INTENT: {
+              target: "#swapMachine.Idle.quote",
+              actions: [
+                {
+                  type: "selectIntent",
+                  params: ({ event }) => ({
+                    intentID: event.intent.intentID!,
+                  }),
                 },
-                SET_INTENT: {
-                  actions: [
-                    {
-                      type: "selectIntent",
-                      params: ({ event }) => ({
-                        intentID: event.intent.intentID!,
-                      }),
-                    },
-                    {
-                      type: "updateIntent",
-                      params: ({ event }) => ({ intent: event.intent }),
-                    },
-                  ],
+                {
+                  type: "updateIntent",
+                  params: ({ event }) => ({
+                    intent: { ...event.intent, state: SwapProgress.Idle },
+                  }),
                 },
-              },
+              ],
             },
           },
         },
