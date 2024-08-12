@@ -1,291 +1,322 @@
 import { assign, setup, fromPromise } from "xstate";
-import { Intent, Quote, SwapContext, SwapEvent, SwapState } from "./types";
 
-// Helper function to find a swap by intentID
-const findSwapByIntentID = (swaps: SwapContext["swaps"], intentID: string) =>
-  swaps.find((swap) => swap.intentID === intentID);
+// Enum to represent the progress of the swap
+export enum SwapProgress {
+  Idle = "Idle",
+  FetchingQuote = "FetchingQuote",
+  Quoted = "Quoted",
+  Submitting = "Submitting",
+  Submitted = "Submitted",
+  Confirming = "Confirming",
+  Confirmed = "Confirmed",
+  Failed = "Failed",
+}
+
+// Data models
+export interface Quote {
+  solverID: string;
+  intentID: string;
+  assetIn: string;
+  assetOut: string;
+  amountIn: string;
+  amountOut: string;
+  expiration?: number;
+}
+
+export interface Intent {
+  intentID: string;
+  initiator: string;
+  assetIn: string;
+  assetOut: string;
+  amountIn: string;
+  expiration?: number;
+  lost?: boolean;
+}
+
+export type IntentState = Intent & {
+  quote?: Quote;
+  state: SwapProgress;
+};
+
+export interface Input {
+  assetIn?: string;
+  assetOut?: string;
+  amountIn?: string;
+}
+
+export interface Context {
+  intents: Record<string, IntentState>;
+  current: string;
+}
+
+export type Events =
+  | { type: "FETCH_QUOTE"; intentID: string }
+  | { type: "FETCH_QUOTE_SUCCESS"; intentID: string }
+  | { type: "FETCH_QUOTE_ERROR"; intentID: string }
+  | { type: "SUBMIT_SWAP"; intentID: string }
+  | { type: "SUBMIT_SWAP_SUCCESS"; intentID: string }
+  | { type: "SUBMIT_SWAP_ERROR"; intentID: string }
+  | { type: "CONFIRM_SWAP"; intentID: string }
+  | { type: "CONFIRM_SWAP_SUCCESS"; intentID: string }
+  | { type: "CONFIRM_SWAP_ERROR"; intentID: string }
+  | { type: "QUOTE_EXPIRED"; intentID: string }
+  | { type: "RETRY_INTENT"; intentID: string }
+  | { type: "SET_INTENT"; intent: Partial<IntentState> };
 
 export const swapMachine = setup({
   types: {
-    context: {} as SwapContext,
-    events: {} as SwapEvent,
+    context: {} as Context,
+    events: {} as Events,
+    input: {} as Input,
+  },
+  actions: {
+    updateIntent: assign({
+      intents: ({ context }, params: { intent: Partial<IntentState> }) => ({
+        ...context.intents,
+        [params.intent.intentID! || context.current]: {
+          ...context.intents[params.intent.intentID! || context.current],
+          ...params.intent,
+        },
+      }),
+    }),
+    selectIntent: assign({
+      current: (_, params: { intentID: string }) => params.intentID,
+    }),
   },
   actors: {
-    fetchQuotes: fromPromise(({ input }: { input: Intent }) =>
-      fetchQuotes(input),
+    fetchQuotes: fromPromise(({ input }: { input: { intent: Intent } }) =>
+      fetchQuotes(input.intent),
     ),
-    initiateSwap: fromPromise(({ input }: { input: Quote }) =>
-      initiateSwap(input),
+    submitSwap: fromPromise(({ input }: { input: { intent: Intent } }) =>
+      initiateSwap(input.intent),
     ),
-    waitForExecution: fromPromise(
-      ({ input }: { input: { intentID: string } }) =>
-        waitForExecution(input.intentID),
+    confirmSwap: fromPromise(({ input }: { input: { intentID: string } }) =>
+      waitForExecution(input.intentID),
     ),
-    retrySwap: fromPromise(({ input }: { input: { intentID: string } }) =>
-      retrySwap(input.intentID),
-    ),
+  },
+  guards: {
+    hasValidQuote: ({ context }) =>
+      context.intents[context.current].state === SwapProgress.Quoted,
   },
 }).createMachine({
   id: "swapMachine",
-  initial: SwapState.Idle,
-  context: {
-    swaps: [
-      {
-        intentID: "",
-        assetIn: "USDT",
-        assetOut: "NEAR",
-        amountIn: "1",
-        state: SwapState.Idle,
+  initial: "Idle",
+  context: ({ input }: { input: Input }) => ({
+    intents: {
+      "0": {
+        intentID: "0",
+        assetIn: input?.assetIn ?? "USDT",
+        assetOut: input?.assetOut ?? "NEAR",
+        amountIn: input?.amountIn ?? "1",
+        initiator: "sender.near",
+        state: SwapProgress.Idle,
       },
-    ],
-  },
+    },
+    current: "0",
+  }),
   states: {
-    [SwapState.Idle]: {
-      on: {
-        FETCH_QUOTES: {
-          target: SwapState.FetchingQuotes,
-          actions: assign(({ context, event }) => {
-            if (event.type === "FETCH_QUOTES") {
-              return {
-                swaps: [
-                  ...context.swaps,
-                  {
-                    intentID: event.intent.intentID,
-                    assetIn: event.intent.assetIn,
-                    assetOut: event.intent.assetOut,
-                    amountIn: event.intent.amountIn,
-                    state: SwapState.FetchingQuotes,
+    Idle: {
+      type: "parallel",
+      states: {
+        quote: {
+          initial: "polling",
+          on: {
+            FETCH_QUOTE: "quote",
+          },
+          states: {
+            polling: {
+              entry: [
+                {
+                  type: "updateIntent",
+                  params: {
+                    intent: {
+                      state: SwapProgress.FetchingQuote,
+                    },
                   },
-                ],
-              };
-            }
-            return context;
-          }),
+                },
+              ],
+              invoke: {
+                src: "fetchQuotes",
+                input: ({ context }) => ({
+                  intent: context.intents[context.current],
+                }),
+                onDone: {
+                  target: "quoted",
+                  actions: [
+                    {
+                      type: "updateIntent",
+                      params: ({ event }) => ({
+                        intent: {
+                          quote: event.output,
+                          state: SwapProgress.Quoted,
+                        },
+                      }),
+                    },
+                  ],
+                },
+                onError: {
+                  target: "none",
+                  actions: {
+                    type: "updateIntent",
+                    params: {
+                      intent: { state: SwapProgress.Failed },
+                    },
+                  },
+                },
+              },
+            },
+            quoted: {
+              after: {
+                5000: "polling", // Automatically refresh quotes every 5 seconds
+              },
+            },
+            none: {
+              after: {
+                500: "polling",
+              },
+            },
+          },
+        },
+        input: {
+          initial: "listening",
+          states: {
+            listening: {
+              on: {
+                SUBMIT_SWAP: {
+                  target: "#swapMachine.Submitting",
+                  guard: "hasValidQuote",
+                },
+                SET_INTENT: {
+                  actions: [
+                    {
+                      type: "selectIntent",
+                      params: ({ event }) => ({
+                        intentID: event.intent.intentID!,
+                      }),
+                    },
+                    {
+                      type: "updateIntent",
+                      params: ({ event }) => ({ intent: event.intent }),
+                    },
+                  ],
+                },
+              },
+            },
+          },
         },
       },
     },
-    [SwapState.FetchingQuotes]: {
-      invoke: {
-        src: "fetchQuotes",
-        input: ({ context }) => {
-          const swap = context.swaps[context.swaps.length - 1];
-          return { ...swap, initiator: "" }; // TODO: provide initiator address from context
+    Submitting: {
+      entry: {
+        type: "updateIntent",
+        params: {
+          intent: { state: SwapProgress.Submitting },
         },
+      },
+      invoke: {
+        src: "submitSwap",
+        input: ({ context }) => ({
+          intent: context.intents[context.current],
+        }),
         onDone: {
-          target: SwapState.QuoteReceived,
-          actions: assign(({ context, event }) => {
-            const { intentID } = event.output;
-            const swap = findSwapByIntentID(context.swaps, intentID);
-            if (swap) {
-              swap.quote = event.output;
-              swap.state = SwapState.QuoteReceived;
-            }
-            return context;
-          }),
+          target: "Confirming",
+          actions: {
+            type: "updateIntent",
+            params: {
+              intent: { state: SwapProgress.Submitted },
+            },
+          },
         },
         onError: {
-          target: SwapState.Error,
-          actions: assign(({ context, event }) => {
-            const { intentID } = event.error;
-            const swap = findSwapByIntentID(context.swaps, intentID);
-            if (swap) {
-              swap.state = SwapState.Error;
-            }
-            return context;
-          }),
+          target: "Failed",
+          actions: {
+            type: "updateIntent",
+            params: {
+              intent: { state: SwapProgress.Failed },
+            },
+          },
         },
       },
     },
-    [SwapState.QuoteReceived]: {
-      on: {
-        INITIATE_SWAP: {
-          target: SwapState.InitiatingSwap,
-          actions: assign(({ context, event }) => {
-            const swap = findSwapByIntentID(context.swaps, event.intentID);
-            if (swap) {
-              swap.state = SwapState.InitiatingSwap;
-            }
-            return context;
-          }),
+    Confirming: {
+      entry: {
+        type: "updateIntent",
+        params: {
+          intent: { state: SwapProgress.Confirming },
         },
       },
-    },
-    [SwapState.InitiatingSwap]: {
       invoke: {
-        src: "initiateSwap",
-        input: ({ context }) => {
-          const swap = context.swaps[context.swaps.length - 1];
-          return swap.quote || ({} as Quote); // TODO: rectify Quote type requirement
-        },
+        src: "confirmSwap",
+        input: ({ context }) => ({
+          intentID: context.current,
+        }),
         onDone: {
-          target: SwapState.WaitingForExecution,
-          actions: assign(({ context, event }) => {
-            const { intentID } = event.output;
-            const swap = findSwapByIntentID(context.swaps, intentID);
-            if (swap) {
-              swap.state = SwapState.WaitingForExecution;
-            }
-            return context;
-          }),
+          target: "Confirmed",
+          actions: {
+            type: "updateIntent",
+            params: {
+              intent: { state: SwapProgress.Confirmed },
+            },
+          },
         },
         onError: {
-          target: SwapState.Error,
-          actions: assign(({ context, event }) => {
-            const { intentID } = event.error;
-            const swap = findSwapByIntentID(context.swaps, intentID);
-            if (swap) {
-              swap.state = SwapState.Error;
-            }
-            return context;
-          }),
+          target: "Failed",
+          actions: {
+            type: "updateIntent",
+            params: {
+              intent: { state: SwapProgress.Failed },
+            },
+          },
         },
       },
     },
-    [SwapState.WaitingForExecution]: {
-      invoke: {
-        src: "waitForExecution",
-        input: ({ context }) => {
-          const swap = context.swaps[context.swaps.length - 1];
-          return { intentID: swap.intentID };
-        },
-        onDone: {
-          target: SwapState.SwapExecuted,
-          actions: assign(({ context, event }) => {
-            const { intentID } = event.output;
-            const swap = findSwapByIntentID(context.swaps, intentID);
-            if (swap) {
-              swap.state = SwapState.SwapExecuted;
-            }
-            return context;
-          }),
-        },
-        onError: {
-          target: SwapState.Error,
-          actions: assign(({ context, event }) => {
-            const { intentID } = event.error;
-            const swap = findSwapByIntentID(context.swaps, intentID);
-            if (swap) {
-              swap.state = SwapState.Error;
-            }
-            return context;
-          }),
-        },
-      },
-    },
-    [SwapState.SwapExecuted]: {
-      on: {
-        INTENT_COMPLETED: {
-          target: SwapState.Completed,
-          actions: assign(({ context, event }) => {
-            const swap = findSwapByIntentID(context.swaps, event.intentID);
-            if (swap) {
-              swap.state = SwapState.Completed;
-            }
-            return context;
-          }),
-        },
-      },
-    },
-    [SwapState.Error]: {
-      on: {
-        RETRY_INTENT: {
-          target: SwapState.Retrying,
-          actions: assign(({ context, event }) => {
-            const swap = findSwapByIntentID(context.swaps, event.intentID);
-            if (swap) {
-              swap.state = SwapState.Retrying;
-            }
-            return context;
-          }),
-        },
-      },
-    },
-    [SwapState.Retrying]: {
-      invoke: {
-        src: "retrySwap",
-        input: ({ context }) => {
-          const swap = context.swaps[context.swaps.length - 1];
-          return { intentID: swap.intentID };
-        },
-        onDone: {
-          target: SwapState.FetchingQuotes,
-          actions: assign(({ context, event }) => {
-            const { intentID } = event.output;
-            const swap = findSwapByIntentID(context.swaps, intentID);
-            if (swap) {
-              swap.state = SwapState.FetchingQuotes;
-            }
-            return context;
-          }),
-        },
-        onError: {
-          target: SwapState.Error,
-          actions: assign(({ context, event }) => {
-            const { intentID } = event.error;
-            const swap = findSwapByIntentID(context.swaps, intentID);
-            if (swap) {
-              swap.state = SwapState.Error;
-            }
-            return context;
-          }),
-        },
-      },
-    },
-    [SwapState.Completed]: {
+    Confirmed: {
       type: "final",
     },
+    Failed: {
+      on: {
+        RETRY_INTENT: "Submitting", // Retry directly transitions to submitting
+      },
+    },
+  },
+  actions: {
+    stopQuoting: assign({
+      intents: ({ context }) => {
+        const currentIntent = context.intents[context.current];
+        if (currentIntent.state === SwapProgress.Quoted) {
+          currentIntent.state = SwapProgress.Submitting;
+        }
+        return context.intents;
+      },
+    }),
   },
 });
 
-function retrySwap(
-  intentID: string,
-): Promise<{ intentID: string; result: boolean }> {
-  return new Promise((resolve) => {
-    // Simulate waiting for execution
-    setTimeout(() => {
-      resolve({ intentID, result: true });
-    }, 1000);
+type ActionResult = { intentID: string; result: boolean };
+
+async function sleep(timeout: number) {
+  await new Promise((resolve) => setTimeout(resolve, timeout));
+}
+
+async function fetchQuotes(intent: Intent): Promise<Quote> {
+  await sleep(200);
+  return Promise.resolve({
+    solverID: "1",
+    intentID: intent.intentID,
+    assetIn: intent.assetIn,
+    assetOut: intent.assetOut,
+    amountIn: intent.amountIn,
+    amountOut: intent.amountIn,
+    expiration: Date.now() + 10000,
   });
 }
 
-function waitForExecution(
-  intentID: string,
-): Promise<{ intentID: string; result: boolean }> {
-  return new Promise((resolve) => {
-    // Simulate waiting for execution
-    setTimeout(() => {
-      resolve({ intentID, result: true });
-    }, 1000);
-  });
+async function initiateSwap({ intentID }: Intent): Promise<ActionResult> {
+  await sleep(200);
+  return Promise.resolve({ intentID, result: true });
 }
 
-function initiateSwap(
-  quote: Quote,
-): Promise<{ intentID: string; result: boolean }> {
-  return new Promise((resolve) => {
-    // Simulate initiating swap
-    setTimeout(() => {
-      resolve({ intentID: quote.intentID, result: true });
-    }, 500);
-  });
-}
-
-function fetchQuotes(intent: Intent): Promise<Quote> {
-  return new Promise((resolve, reject) => {
-    // Simulate fetching quotes
-    setTimeout(() => {
-      resolve({
-        solverID: "1",
-        assetIn: intent.assetIn,
-        assetOut: intent.assetOut,
-        amountIn: intent.amountIn,
-        amountOut: intent.amountIn, // TODO: change the computed amountOut
-        expiration: Date.now() + 10000,
-      } as Quote);
-    }, 500);
-
-    setTimeout(() => {
-      reject({ intentID: intent.intentID });
-    });
-  });
+async function waitForExecution(intentID: string): Promise<ActionResult> {
+  await sleep(1000);
+  return Promise.resolve({ intentID, result: true });
 }
