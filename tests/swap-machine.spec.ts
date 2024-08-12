@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { createActor, fromPromise } from "xstate";
-import { swapMachine, SwapProgress } from "./swap-machine";
+import { swapMachine, SwapProgress } from "../src";
 
 describe("swapMachine", () => {
   // Arrange
@@ -11,6 +11,46 @@ describe("swapMachine", () => {
   it("should initialize with Idle state", () => {
     const actor = createActor(swapMachine).start();
     expect(actor.getSnapshot().value).toHaveProperty("Idle");
+    actor.stop();
+  });
+
+  it("should initialize with provided input parameters", () => {
+    // Initialize the machine with custom input
+    const actor = createActor(swapMachine, {
+      input: {
+        assetIn: "BTC",
+        assetOut: "ETH",
+        amountIn: "0.1",
+      },
+    }).start();
+
+    // Assert: Check if the input was correctly set in the initial context
+    const snapshot = actor.getSnapshot();
+    expect(snapshot.context.intents["0"]).toMatchObject({
+      intentID: "0",
+      assetIn: "BTC",
+      assetOut: "ETH",
+      amountIn: "0.1",
+      initiator: "sender.near",
+    });
+
+    actor.stop();
+  });
+
+  it("should initialize with default input parameters when none provided", () => {
+    // Initialize the machine without custom input
+    const actor = createActor(swapMachine).start();
+
+    // Assert: Check if the default values are correctly set in the initial context
+    const snapshot = actor.getSnapshot();
+    expect(snapshot.context.intents["0"]).toMatchObject({
+      intentID: "0",
+      assetIn: "USDT",
+      assetOut: "NEAR",
+      amountIn: "1",
+      initiator: "sender.near",
+    });
+
     actor.stop();
   });
 
@@ -91,7 +131,7 @@ describe("swapMachine", () => {
     let pollingCount = 0;
 
     actor.subscribe((state) => {
-      if (state.context.intents["0"].state === SwapProgress.FetchingQuote) {
+      if (state.context.intents["0"].state === SwapProgress.Quoting) {
         pollingCount++;
       }
     });

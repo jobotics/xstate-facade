@@ -3,7 +3,7 @@ import { assign, setup, fromPromise } from "xstate";
 // Enum to represent the progress of the swap
 export enum SwapProgress {
   Idle = "Idle",
-  FetchingQuote = "FetchingQuote",
+  Quoting = "Quoting",
   Quoted = "Quoted",
   Submitting = "Submitting",
   Submitted = "Submitted",
@@ -38,16 +38,16 @@ export type IntentState = Intent & {
   state: SwapProgress;
 };
 
-export interface Input {
+export type Input = {
   assetIn?: string;
   assetOut?: string;
   amountIn?: string;
-}
+};
 
-export interface Context {
+export type Context = {
   intents: Record<string, IntentState>;
   current: string;
-}
+};
 
 export type Events =
   | { type: "FETCH_QUOTE"; intentID: string }
@@ -62,6 +62,27 @@ export type Events =
   | { type: "QUOTE_EXPIRED"; intentID: string }
   | { type: "RETRY_INTENT"; intentID: string }
   | { type: "SET_INTENT"; intent: Partial<IntentState> };
+
+const next = (state: SwapProgress) => {
+  switch (state) {
+    case SwapProgress.Idle:
+      return SwapProgress.Quoting;
+    case SwapProgress.Quoting:
+      return SwapProgress.Quoted;
+    case SwapProgress.Quoted:
+      return SwapProgress.Submitting;
+    case SwapProgress.Submitting:
+      return SwapProgress.Submitted;
+    case SwapProgress.Submitted:
+      return SwapProgress.Confirming;
+    case SwapProgress.Confirming:
+      return SwapProgress.Confirmed;
+    case SwapProgress.Failed:
+      return SwapProgress.Submitting;
+    default:
+      return SwapProgress.Idle;
+  }
+};
 
 export const swapMachine = setup({
   types: {
@@ -81,6 +102,24 @@ export const swapMachine = setup({
     }),
     selectIntent: assign({
       current: (_, params: { intentID: string }) => params.intentID,
+    }),
+    progressIntent: assign({
+      intents: ({ context }) => ({
+        ...context.intents,
+        [context.current]: {
+          ...context.intents[context.current],
+          state: next(context.intents[context.current].state),
+        },
+      }),
+    }),
+    failIntent: assign({
+      intents: ({ context }) => ({
+        ...context.intents,
+        [context.current]: {
+          ...context.intents[context.current],
+          state: SwapProgress.Failed,
+        },
+      }),
     }),
   },
   actors: {
@@ -120,9 +159,6 @@ export const swapMachine = setup({
       states: {
         quote: {
           initial: "polling",
-          on: {
-            FETCH_QUOTE: "quote",
-          },
           states: {
             polling: {
               entry: [
@@ -130,7 +166,7 @@ export const swapMachine = setup({
                   type: "updateIntent",
                   params: {
                     intent: {
-                      state: SwapProgress.FetchingQuote,
+                      state: SwapProgress.Quoting,
                     },
                   },
                 },
@@ -143,12 +179,13 @@ export const swapMachine = setup({
                 onDone: {
                   target: "quoted",
                   actions: [
+                    "progressIntent",
                     {
                       type: "updateIntent",
                       params: ({ event }) => ({
                         intent: {
+                          assetOut: event.output.assetOut,
                           quote: event.output,
-                          state: SwapProgress.Quoted,
                         },
                       }),
                     },
@@ -156,18 +193,13 @@ export const swapMachine = setup({
                 },
                 onError: {
                   target: "none",
-                  actions: {
-                    type: "updateIntent",
-                    params: {
-                      intent: { state: SwapProgress.Failed },
-                    },
-                  },
+                  actions: ["failIntent"],
                 },
               },
             },
             quoted: {
               after: {
-                5000: "polling", // Automatically refresh quotes every 5 seconds
+                5000: "polling",
               },
             },
             none: {
@@ -175,6 +207,9 @@ export const swapMachine = setup({
                 500: "polling",
               },
             },
+          },
+          on: {
+            FETCH_QUOTE: "quote",
           },
         },
         input: {
@@ -207,12 +242,7 @@ export const swapMachine = setup({
       },
     },
     Submitting: {
-      entry: {
-        type: "updateIntent",
-        params: {
-          intent: { state: SwapProgress.Submitting },
-        },
-      },
+      entry: ["progressIntent"],
       invoke: {
         src: "submitSwap",
         input: ({ context }) => ({
@@ -220,31 +250,16 @@ export const swapMachine = setup({
         }),
         onDone: {
           target: "Confirming",
-          actions: {
-            type: "updateIntent",
-            params: {
-              intent: { state: SwapProgress.Submitted },
-            },
-          },
+          actions: ["progressIntent"],
         },
         onError: {
           target: "Failed",
-          actions: {
-            type: "updateIntent",
-            params: {
-              intent: { state: SwapProgress.Failed },
-            },
-          },
+          actions: ["failIntent"],
         },
       },
     },
     Confirming: {
-      entry: {
-        type: "updateIntent",
-        params: {
-          intent: { state: SwapProgress.Confirming },
-        },
-      },
+      entry: ["progressIntent"],
       invoke: {
         src: "confirmSwap",
         input: ({ context }) => ({
@@ -252,21 +267,11 @@ export const swapMachine = setup({
         }),
         onDone: {
           target: "Confirmed",
-          actions: {
-            type: "updateIntent",
-            params: {
-              intent: { state: SwapProgress.Confirmed },
-            },
-          },
+          actions: ["progressIntent"], // TODO: set tx hash
         },
         onError: {
           target: "Failed",
-          actions: {
-            type: "updateIntent",
-            params: {
-              intent: { state: SwapProgress.Failed },
-            },
-          },
+          actions: ["failIntent"],
         },
       },
     },
@@ -275,20 +280,9 @@ export const swapMachine = setup({
     },
     Failed: {
       on: {
-        RETRY_INTENT: "Submitting", // Retry directly transitions to submitting
+        RETRY_INTENT: "Submitting",
       },
     },
-  },
-  actions: {
-    stopQuoting: assign({
-      intents: ({ context }) => {
-        const currentIntent = context.intents[context.current];
-        if (currentIntent.state === SwapProgress.Quoted) {
-          currentIntent.state = SwapProgress.Submitting;
-        }
-        return context.intents;
-      },
-    }),
   },
 });
 
