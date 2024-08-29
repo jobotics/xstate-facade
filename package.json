@@ -1,9 +1,11 @@
 {
-  "name": "aurora-statooor",
+  "name": "xstate-facade",
   "version": "1.0.0",
   "description": "",
   "main": "src/index.js",
   "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
     "test": "vitest",
     "test:ui": "vitest --ui",
     "test:run": "vitest run",
