@@ -1,86 +1,25 @@
 import { assign, setup, fromPromise } from "xstate";
+import {Context, Input, IntentState, Quote, SwapProgressEnum} from "./swap-machine.ex.interfaces";
+import {Events, Intent} from "./swap-machine.in.interfaces";
 
-// Enum to represent the progress of the swap
-export enum SwapProgress {
-  Idle = "Idle",
-  Quoting = "Quoting",
-  Quoted = "Quoted",
-  Submitting = "Submitting",
-  Submitted = "Submitted",
-  Confirming = "Confirming",
-  Confirmed = "Confirmed",
-  Failed = "Failed",
-}
-
-// Data models
-export interface Quote {
-  solverID: string;
-  intentID: string;
-  assetIn: string;
-  assetOut: string;
-  amountIn: string;
-  amountOut: string;
-  expiration?: number;
-}
-
-export interface Intent {
-  intentID: string;
-  initiator: string;
-  assetIn: string;
-  assetOut: string;
-  amountIn: string;
-  expiration?: number;
-  lost?: boolean;
-}
-
-export type IntentState = Intent & {
-  quote?: Quote;
-  state: SwapProgress;
-};
-
-export type Input = {
-  assetIn?: string;
-  assetOut?: string;
-  amountIn?: string;
-};
-
-export type Context = {
-  intents: Record<string, IntentState>;
-  current: string;
-};
-
-export type Events =
-  | { type: "FETCH_QUOTE"; intentID: string }
-  | { type: "FETCH_QUOTE_SUCCESS"; intentID: string }
-  | { type: "FETCH_QUOTE_ERROR"; intentID: string }
-  | { type: "SUBMIT_SWAP"; intentID: string }
-  | { type: "SUBMIT_SWAP_SUCCESS"; intentID: string }
-  | { type: "SUBMIT_SWAP_ERROR"; intentID: string }
-  | { type: "CONFIRM_SWAP"; intentID: string }
-  | { type: "CONFIRM_SWAP_SUCCESS"; intentID: string }
-  | { type: "CONFIRM_SWAP_ERROR"; intentID: string }
-  | { type: "QUOTE_EXPIRED"; intentID: string }
-  | { type: "RETRY_INTENT"; intentID: string }
-  | { type: "SET_INTENT"; intent: Partial<IntentState> };
-
-const next = (state: SwapProgress) => {
+const next = (state: SwapProgressEnum) => {
   switch (state) {
-    case SwapProgress.Idle:
-      return SwapProgress.Quoting;
-    case SwapProgress.Quoting:
-      return SwapProgress.Quoted;
-    case SwapProgress.Quoted:
-      return SwapProgress.Submitting;
-    case SwapProgress.Submitting:
-      return SwapProgress.Submitted;
-    case SwapProgress.Submitted:
-      return SwapProgress.Confirming;
-    case SwapProgress.Confirming:
-      return SwapProgress.Confirmed;
-    case SwapProgress.Failed:
-      return SwapProgress.Submitting;
+    case SwapProgressEnum.Idle:
+      return SwapProgressEnum.Quoting;
+    case SwapProgressEnum.Quoting:
+      return SwapProgressEnum.Quoted;
+    case SwapProgressEnum.Quoted:
+      return SwapProgressEnum.Submitting;
+    case SwapProgressEnum.Submitting:
+      return SwapProgressEnum.Submitted;
+    case SwapProgressEnum.Submitted:
+      return SwapProgressEnum.Confirming;
+    case SwapProgressEnum.Confirming:
+      return SwapProgressEnum.Confirmed;
+    case SwapProgressEnum.Failed:
+      return SwapProgressEnum.Submitting;
     default:
-      return SwapProgress.Idle;
+      return SwapProgressEnum.Idle;
   }
 };
 
@@ -117,7 +56,7 @@ export const swapMachine = setup({
         ...context.intents,
         [context.current]: {
           ...context.intents[context.current],
-          state: SwapProgress.Failed,
+          state: SwapProgressEnum.Failed,
         },
       }),
     }),
@@ -135,24 +74,22 @@ export const swapMachine = setup({
   },
   guards: {
     hasValidQuote: ({ context }) =>
-      context.intents[context.current].state === SwapProgress.Quoted,
+      context.intents[context.current].state === SwapProgressEnum.Quoted,
   },
 }).createMachine({
   id: "swapMachine",
   initial: "Idle",
-  context: ({ input }: { input: Input }) => ({
-    intents: {
-      "0": {
-        intentID: "0",
-        assetIn: input?.assetIn ?? "USDT",
-        assetOut: input?.assetOut ?? "NEAR",
-        amountIn: input?.amountIn ?? "1",
-        initiator: "sender.near",
-        state: SwapProgress.Idle,
-      },
-    },
-    current: "0",
-  }),
+  context: ({ input }: { input: IntentState[] }) => {
+    const intents = input?.reduce((acc, props, index) => {
+      acc[`${index}`] = { ...props };
+      return acc;
+    }, {});
+
+    return {
+      intents: intents || {},
+      current: input?.length.toString() ?? "0",
+    };
+  },
   states: {
     Idle: {
       type: "parallel",
@@ -166,7 +103,7 @@ export const swapMachine = setup({
                   type: "updateIntent",
                   params: {
                     intent: {
-                      state: SwapProgress.Quoting,
+                      state: SwapProgressEnum.Quoting,
                     },
                   },
                 },
@@ -230,7 +167,7 @@ export const swapMachine = setup({
                 {
                   type: "updateIntent",
                   params: ({ event }) => ({
-                    intent: { ...event.intent, state: SwapProgress.Idle },
+                    intent: { ...event.intent, state: SwapProgressEnum.Idle },
                   }),
                 },
               ],

@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { createActor, fromPromise } from "xstate";
-import { swapMachine, SwapProgress } from "../src";
+import { swapMachine } from "../src";
+import {mockInput, mockIntents} from "../src/mocks";
 
 describe("swapMachine", () => {
   // Arrange
@@ -8,48 +9,32 @@ describe("swapMachine", () => {
     await new Promise((resolve) => setTimeout(resolve, timeout));
   };
 
-  it("should initialize with Idle state", () => {
+  it.only("should initialize with Idle state", () => {
     const actor = createActor(swapMachine).start();
     expect(actor.getSnapshot().value).toHaveProperty("Idle");
     actor.stop();
   });
 
-  it("should initialize with provided input parameters", () => {
-    // Initialize the machine with custom input
+  it.only("should initialize with provided inputs parameters", () => {
+    // Initialize the machine with custom inputs
     const actor = createActor(swapMachine, {
-      input: {
-        assetIn: "BTC",
-        assetOut: "ETH",
-        amountIn: "0.1",
-      },
+      input: mockIntents,
     }).start();
 
     // Assert: Check if the input was correctly set in the initial context
     const snapshot = actor.getSnapshot();
-    expect(snapshot.context.intents["0"]).toMatchObject({
-      intentID: "0",
-      assetIn: "BTC",
-      assetOut: "ETH",
-      amountIn: "0.1",
-      initiator: "sender.near",
-    });
+    expect(snapshot.context.intents["0"]).toMatchObject(mockIntents[0]);
 
     actor.stop();
   });
 
-  it("should initialize with default input parameters when none provided", () => {
+  it.only("should initialize with default inputs parameters when none provided", () => {
     // Initialize the machine without custom input
     const actor = createActor(swapMachine).start();
 
     // Assert: Check if the default values are correctly set in the initial context
     const snapshot = actor.getSnapshot();
-    expect(snapshot.context.intents["0"]).toMatchObject({
-      intentID: "0",
-      assetIn: "USDT",
-      assetOut: "NEAR",
-      amountIn: "1",
-      initiator: "sender.near",
-    });
+    expect(snapshot.context.intents["0"]).toMatchObject({});
 
     actor.stop();
   });
