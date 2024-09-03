@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { createActor, fromPromise } from "xstate";
 import { swapMachine } from "../src";
-import {mockInput, mockIntents} from "../src/mocks";
+import { mockGetIntent, mockInitialState } from "../src/mocks/mocks";
 
 describe("swapMachine", () => {
   // Arrange
@@ -15,15 +15,15 @@ describe("swapMachine", () => {
     actor.stop();
   });
 
-  it.only("should initialize with provided inputs parameters", () => {
+  it.only("should initialize with provided inputs parameters", async () => {
     // Initialize the machine with custom inputs
     const actor = createActor(swapMachine, {
-      input: mockIntents,
+      input: mockInitialState,
     }).start();
 
     // Assert: Check if the input was correctly set in the initial context
     const snapshot = actor.getSnapshot();
-    expect(snapshot.context.intents["0"]).toMatchObject(mockIntents[0]);
+    expect(snapshot.context.intents["0"]).toMatchObject(mockInitialState[0]);
 
     actor.stop();
   });
@@ -35,6 +35,24 @@ describe("swapMachine", () => {
     // Assert: Check if the default values are correctly set in the initial context
     const snapshot = actor.getSnapshot();
     expect(snapshot.context.intents["0"]).toMatchObject({});
+
+    actor.stop();
+  });
+
+  it.only("should initialize with backups inputs parameters", async () => {
+    // Initialize the machine without custom input
+    const actor = createActor(swapMachine, {
+      input: mockInitialState,
+    }).start();
+
+    await sleep(2000);
+
+    // Assert: Check if the get intent values are correctly set in the initial context
+    const snapshot = actor.getSnapshot();
+    const intentID =
+      "5f0c2ea48a05f2409f8037c014440ee45d0a700407b7682b683abbd737909d24";
+
+    expect(snapshot.context.intents[intentID]).toMatchObject(mockGetIntent);
 
     actor.stop();
   });

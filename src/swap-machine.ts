@@ -1,6 +1,14 @@
 import { assign, setup, fromPromise } from "xstate";
-import {Context, Input, IntentState, Quote, SwapProgressEnum} from "./swap-machine.ex.interfaces";
-import {Events, Intent} from "./swap-machine.in.interfaces";
+import {
+  Context,
+  Input,
+  IntentState,
+  Quote,
+  SwapProgressEnum,
+} from "./interfaces/swap-machine.ex.interfaces";
+import { Events, Intent } from "./interfaces/swap-machine.in.interfaces";
+import { IntentProcessorService } from "./services/intent-processor.service";
+import { sleep } from "./utils/utils";
 
 const next = (state: SwapProgressEnum) => {
   switch (state) {
@@ -31,13 +39,16 @@ export const swapMachine = setup({
   },
   actions: {
     updateIntent: assign({
-      intents: ({ context }, params: { intent: Partial<IntentState> }) => ({
-        ...context.intents,
-        [params.intent.intentID! || context.current]: {
-          ...context.intents[params.intent.intentID! || context.current],
-          ...params.intent,
-        },
-      }),
+      intents: ({ context }, params: { intent: Partial<IntentState> }) => {
+        const intent = {
+          ...context.intents,
+          [params.intent.intentID! || context.current]: {
+            ...context.intents[params.intent.intentID! || context.current],
+            ...params.intent,
+          },
+        };
+        return intent;
+      },
     }),
     selectIntent: assign({
       current: (_, params: { intentID: string }) => params.intentID,
@@ -62,6 +73,10 @@ export const swapMachine = setup({
     }),
   },
   actors: {
+    loadBackups: fromPromise(
+      async ({ input }: { input: { intent: string } }) =>
+        await new IntentProcessorService().initialize(input.intent),
+    ),
     fetchQuotes: fromPromise(({ input }: { input: { intent: Intent } }) =>
       fetchQuotes(input.intent),
     ),
@@ -79,21 +94,43 @@ export const swapMachine = setup({
 }).createMachine({
   id: "swapMachine",
   initial: "Idle",
-  context: ({ input }: { input: IntentState[] }) => {
-    const intents = input?.reduce((acc, props, index) => {
-      acc[`${index}`] = { ...props };
-      return acc;
-    }, {});
-
+  context: ({ input }: { input: Intent[] }) => {
+    const intents =
+      input?.reduce((acc, intent, index) => {
+        acc[`${index}`] = intent;
+        return acc;
+      }, {}) ?? {};
+    const current = (input?.length - 1).toString() ?? "0";
     return {
-      intents: intents || {},
-      current: input?.length.toString() ?? "0",
+      intents,
+      current,
     };
   },
   states: {
     Idle: {
       type: "parallel",
       states: {
+        backups: {
+          invoke: {
+            src: "loadBackups",
+            input: ({ context }) => ({
+              intent: context.intents[context.current],
+            }),
+            onDone: {
+              actions: [
+                {
+                  type: "updateIntent",
+                  params: ({ event }) => ({
+                    intent: event.output,
+                  }),
+                },
+              ],
+            },
+            onError: {
+              actions: ["logBackupError"],
+            },
+          },
+        },
         quote: {
           initial: "polling",
           states: {
@@ -222,10 +259,6 @@ export const swapMachine = setup({
 });
 
 type ActionResult = { intentID: string; result: boolean };
-
-async function sleep(timeout: number) {
-  await new Promise((resolve) => setTimeout(resolve, timeout));
-}
 
 async function fetchQuotes(intent: Intent): Promise<Quote> {
   await sleep(200);
