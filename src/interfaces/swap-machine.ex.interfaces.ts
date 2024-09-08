@@ -42,7 +42,7 @@ export type Input = {
 };
 
 export type Asset = {
-  defuseAssetID: string;
+  defuseAssetId: string;
   decimals: number;
   assetName: string;
   metadataLink: string;
@@ -50,18 +50,19 @@ export type Asset = {
 };
 
 export type IntentState = Intent & {
-  hash: string;
   status: SwapProgressEnum;
+  proof?: string;
+  referral?: string;
 };
 
 export type Context = {
-  intents: Record<string, IntentState>;
+  intent: Record<string, IntentState>;
   current: string;
 };
 
-export interface Quote {
-  defuseAssetIdentifierIn: string;
-  defuseAssetIdentifierOut: string;
+export interface QuoteParams {
+  defuseAssetIdEntifierIn: string;
+  defuseAssetIdEntifierOut: string;
   amountIn: string;
   intentType: string;
 }
@@ -72,3 +73,8 @@ export type QuoteList = {
   solverID: string;
   amountOut: string;
 }[];
+
+export interface SolverQuote {
+  solver_id: string;
+  amount_out: string;
+}

@@ -1,62 +1,39 @@
-import { HttpService } from "./http.service";
-import { Buffer } from "buffer";
-import {
-  Intent,
-  IntentDetails,
-} from "../interfaces/swap-machine.in.interfaces";
+import { SwapStatusEnum } from "../interfaces/swap-machine.in.interfaces";
 import { mapAssetKey } from "../maps/maps";
-
-const rpc = "https://nearrpc.aurora.dev";
-const protocolID = "swap-defuse.near";
+import {
+  IntentState,
+  QuoteParams,
+  SolverQuote,
+  SwapProgressEnum,
+} from "src/interfaces/swap-machine.ex.interfaces";
+import { ApiService } from "./api.service";
 
 export class IntentProcessorService {
-  private httpService: HttpService;
+  constructor(private readonly apiService: ApiService) {}
 
-  constructor() {
-    this.httpService = new HttpService();
-  }
-
-  private async getIntent(intentID: string): Promise<IntentDetails | null> {
-    try {
-      const payload = {
-        jsonrpc: "2.0",
-        id: 1,
-        method: "query",
-        params: {
-          request_type: "call_function",
-          account_id: protocolID,
-          method_name: "get_intent",
-          args_base64: Buffer.from(JSON.stringify({ id: intentID })).toString(
-            "base64",
-          ),
-          finality: "final",
-        },
-      };
-      const response = await this.httpService.post(rpc, payload);
-      if (response?.result?.result) {
-        const byteArray = new Uint8Array(response.result.result);
-        const decoder = new TextDecoder();
-        const jsonString = decoder.decode(byteArray);
-
-        const intentDetails = JSON.parse(jsonString);
-        return intentDetails;
-      } else {
-        console.error("Unexpected response format:", response);
-        return null;
-      }
-    } catch (error) {
-      console.error("Failed to get intent:", error);
-      return null;
+  private initializeProgressStatusAdapter(
+    status: SwapStatusEnum,
+  ): SwapProgressEnum {
+    switch (status) {
+      case SwapStatusEnum.Available:
+        return SwapProgressEnum.Confirming;
+      case SwapStatusEnum.Executed:
+      case SwapStatusEnum.Completed:
+        return SwapProgressEnum.Confirmed;
+      case SwapStatusEnum.RolledBack:
+        return SwapProgressEnum.Failed;
+      default:
+        return SwapProgressEnum.Idle;
     }
   }
 
-  async initialize(intentID: string): Promise<Intent | null> {
-    const intentDetails = await this.getIntent(intentID);
+  async initialize(intentId: string): Promise<IntentState | null> {
+    const intentDetails = await this.apiService.getIntent(intentId);
     if (!intentDetails) {
       return null;
     }
     const intent = {
-      intentID,
+      intentId,
       initiator: intentDetails.asset_in.account,
       assetIn:
         intentDetails.asset_in?.asset ??
@@ -74,7 +51,34 @@ export class IntentProcessorService {
       amountOut: intentDetails.asset_out.amount,
       expiration: intentDetails.expiration.block_number,
       lockup: intentDetails.lockup_until.block_number,
+      status: this.initializeProgressStatusAdapter(intentDetails.status),
     };
     return intent;
+  }
+
+  async fetchQuotes(params: QuoteParams): Promise<SolverQuote[]> {
+    const quotes = await this.apiService.getQuotes(params);
+    return quotes;
+  }
+
+  next(state: SwapProgressEnum): SwapProgressEnum {
+    switch (state) {
+      case SwapProgressEnum.Idle:
+        return SwapProgressEnum.Quoting;
+      case SwapProgressEnum.Quoting:
+        return SwapProgressEnum.Quoted;
+      case SwapProgressEnum.Quoted:
+        return SwapProgressEnum.Submitting;
+      case SwapProgressEnum.Submitting:
+        return SwapProgressEnum.Submitted;
+      case SwapProgressEnum.Submitted:
+        return SwapProgressEnum.Confirming;
+      case SwapProgressEnum.Confirming:
+        return SwapProgressEnum.Confirmed;
+      case SwapProgressEnum.Failed:
+        return SwapProgressEnum.Submitting;
+      default:
+        return SwapProgressEnum.Idle;
+    }
   }
 }

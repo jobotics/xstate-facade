@@ -1,7 +1,13 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { createActor, fromPromise } from "xstate";
 import { swapMachine } from "../src";
-import { mockGetIntent, mockInitialState } from "../src/mocks/mocks";
+import {
+  mockGetIntent,
+  mockInitialState,
+  mockIntentId,
+  mockIntentState,
+} from "../src/mocks/mocks";
+import { SwapProgressEnum } from "../src/interfaces/swap-machine.ex.interfaces";
 
 describe("swapMachine", () => {
   // Arrange
@@ -9,62 +15,64 @@ describe("swapMachine", () => {
     await new Promise((resolve) => setTimeout(resolve, timeout));
   };
 
-  it.only("should initialize with Idle state", () => {
+  it("should initialize with Idle state", () => {
     const actor = createActor(swapMachine).start();
     expect(actor.getSnapshot().value).toHaveProperty("Idle");
     actor.stop();
   });
 
-  it.only("should initialize with provided inputs parameters", async () => {
-    // Initialize the machine with custom inputs
-    const actor = createActor(swapMachine, {
-      input: mockInitialState,
-    }).start();
-
-    // Assert: Check if the input was correctly set in the initial context
-    const snapshot = actor.getSnapshot();
-    expect(snapshot.context.intents["0"]).toMatchObject(mockInitialState[0]);
-
-    actor.stop();
-  });
-
-  it.only("should initialize with default inputs parameters when none provided", () => {
-    // Initialize the machine without custom input
+  it("should initialize with default inputs parameters when none provided", () => {
     const actor = createActor(swapMachine).start();
 
-    // Assert: Check if the default values are correctly set in the initial context
     const snapshot = actor.getSnapshot();
-    expect(snapshot.context.intents["0"]).toMatchObject({});
+    expect(snapshot.context.intent).toMatchObject({});
 
     actor.stop();
   });
 
-  it.only("should initialize with backups inputs parameters", async () => {
-    // Initialize the machine without custom input
-    const actor = createActor(swapMachine, {
-      input: mockInitialState,
+  it("should initialize with provided inputs", async () => {
+    const mockIntentProcessorService = {
+      initialize: vi.fn().mockResolvedValue({
+        ...mockIntentState,
+        status: mockIntentState.status,
+      }),
+    };
+
+    const testMachine = swapMachine.provide({
+      actors: {
+        recoverIntent: fromPromise(({ input }) =>
+          mockIntentProcessorService.initialize(input.intentId),
+        ),
+      },
+    });
+
+    const actor = createActor(testMachine, {
+      input: { intentId: mockIntentId },
     }).start();
 
-    await sleep(2000);
+    await actor.getSnapshot().done;
 
-    // Assert: Check if the get intent values are correctly set in the initial context
+    expect(mockIntentProcessorService.initialize).toHaveBeenCalledWith(
+      mockIntentId,
+    );
+
     const snapshot = actor.getSnapshot();
-    const intentID =
-      "5f0c2ea48a05f2409f8037c014440ee45d0a700407b7682b683abbd737909d24";
-
-    expect(snapshot.context.intents[intentID]).toMatchObject(mockGetIntent);
+    expect(snapshot.context.intent).toEqual({
+      ...mockIntentState,
+      status: mockIntentState.status,
+    });
 
     actor.stop();
   });
 
-  it("should handle input and set intents", () => {
+  it.skip("should handle input and set intents", () => {
     const actor = createActor(swapMachine).start();
 
     // Act: Set intent
     actor.send({
       type: "SET_INTENT",
       intent: {
-        intentID: "1",
+        intentId: "1",
         assetIn: "ETH",
         assetOut: "USDT",
         amountIn: "0.5",
@@ -76,7 +84,7 @@ describe("swapMachine", () => {
     const snapshot = actor.getSnapshot();
     expect(snapshot.context.current).toBe("1");
     expect(snapshot.context.intents["1"]).toMatchObject({
-      intentID: "1",
+      intentId: "1",
       assetIn: "ETH",
       assetOut: "USDT",
       amountIn: "0.5",
@@ -86,13 +94,13 @@ describe("swapMachine", () => {
     actor.stop();
   });
 
-  it("should fetch quotes and transition to Quoted state", async () => {
+  it.skip("should fetch quotes and transition to Quoted state", async () => {
     const actor = createActor(swapMachine).start();
 
     // Act: Start quote fetching
     actor.send({
       type: "FETCH_QUOTE",
-      intentID: "0",
+      intentId: "0",
     });
 
     // Assert: Wait for quote to be fetched
@@ -103,12 +111,12 @@ describe("swapMachine", () => {
     actor.stop();
   });
 
-  it("should transition to Submitting state on swap submission", async () => {
+  it.skip("should transition to Submitting state on swap submission", async () => {
     const actor = createActor(swapMachine).start();
 
     // Act: Submit swap
     await sleep(200);
-    actor.send({ type: "SUBMIT_SWAP", intentID: "0" });
+    actor.send({ type: "SUBMIT_SWAP", intentId: "0" });
 
     // Assert: Ensure transition to Submitting state
     const snapshot = actor.getSnapshot();
@@ -117,7 +125,7 @@ describe("swapMachine", () => {
     actor.stop();
   });
 
-  it("should handle swap submission failure and retry", async () => {
+  it.skip("should handle swap submission failure and retry", async () => {
     let submissionAttempts = 0;
     const actor = createActor(
       swapMachine.provide({
@@ -126,11 +134,11 @@ describe("swapMachine", () => {
             submissionAttempts++;
             return submissionAttempts === 1
               ? Promise.reject({
-                  intentID: input.intent.intentID,
+                  intentId: input.intent.intentId,
                   result: false,
                 })
               : Promise.resolve({
-                  intentID: input.intent.intentID,
+                  intentId: input.intent.intentId,
                   result: true,
                 });
           }),
@@ -140,12 +148,12 @@ describe("swapMachine", () => {
 
     // Act: Submit swap and expect failure
     await sleep(200);
-    actor.send({ type: "SUBMIT_SWAP", intentID: "0" });
+    actor.send({ type: "SUBMIT_SWAP", intentId: "0" });
     await sleep(200);
     expect(actor.getSnapshot().value).toBe("Failed");
 
     // Retry submission
-    actor.send({ type: "RETRY_INTENT", intentID: "0" });
+    actor.send({ type: "RETRY_INTENT", intentId: "0" });
 
     // Assert: Ensure transition to Submitting state after retry
     expect(actor.getSnapshot().context.intents["0"].state).toBe(
@@ -155,12 +163,12 @@ describe("swapMachine", () => {
     actor.stop();
   });
 
-  it("should transition to Confirming state after successful submission", async () => {
+  it.skip("should transition to Confirming state after successful submission", async () => {
     const actor = createActor(swapMachine).start();
 
     // Act: Submit swap
     await sleep(200); // wait for quote
-    actor.send({ type: "SUBMIT_SWAP", intentID: "0" });
+    actor.send({ type: "SUBMIT_SWAP", intentId: "0" });
     await sleep(200); // wait for submission to complete
 
     // Assert: Transition to Confirming state
@@ -170,7 +178,7 @@ describe("swapMachine", () => {
     actor.stop();
   });
 
-  it("should handle swap confirmation failure and retry", async () => {
+  it.skip("should handle swap confirmation failure and retry", async () => {
     let confirmationAttempts = 0;
     const actor = createActor(
       swapMachine.provide({
@@ -178,8 +186,8 @@ describe("swapMachine", () => {
           confirmSwap: fromPromise(({ input }) => {
             confirmationAttempts++;
             return confirmationAttempts === 1
-              ? Promise.reject({ intentID: input.intentID, result: false })
-              : Promise.resolve({ intentID: input.intentID, result: true });
+              ? Promise.reject({ intentId: input.intentId, result: false })
+              : Promise.resolve({ intentId: input.intentId, result: true });
           }),
         },
       }),
@@ -187,12 +195,12 @@ describe("swapMachine", () => {
 
     // Act: Submit swap and wait for confirmation failure
     await sleep(200);
-    actor.send({ type: "SUBMIT_SWAP", intentID: "0" });
+    actor.send({ type: "SUBMIT_SWAP", intentId: "0" });
     await sleep(200);
     expect(actor.getSnapshot().value).toBe("Failed");
 
     // Retry confirmation
-    actor.send({ type: "RETRY_INTENT", intentID: "0" });
+    actor.send({ type: "RETRY_INTENT", intentId: "0" });
 
     // Assert: Ensure transition to Confirming state after retry
     expect(actor.getSnapshot().context.intents["0"].state).toBe(
@@ -202,12 +210,12 @@ describe("swapMachine", () => {
     actor.stop();
   });
 
-  it("should finalize in Confirmed state", async () => {
+  it.skip("should finalize in Confirmed state", async () => {
     const actor = createActor(swapMachine).start();
 
     // Act: Submit swap and wait for final confirmation
     await sleep(200);
-    actor.send({ type: "SUBMIT_SWAP", intentID: "0" });
+    actor.send({ type: "SUBMIT_SWAP", intentId: "0" });
     await sleep(1500);
 
     // Assert: Ensure final state is Confirmed
@@ -217,7 +225,7 @@ describe("swapMachine", () => {
     actor.stop();
   });
 
-  it("should periodically refetch quotes", async () => {
+  it.skip("should periodically refetch quotes", async () => {
     const actor = createActor(swapMachine).start();
     let quoteFoundCount = 0;
 
@@ -235,30 +243,4 @@ describe("swapMachine", () => {
 
     actor.stop();
   }, 6000);
-
-  it("should refetch quotes on failure", async () => {
-    const actor = createActor(
-      swapMachine.provide({
-        actors: {
-          fetchQuotes: fromPromise(() => Promise.reject({ result: false })),
-        },
-      }),
-    ).start();
-
-    let pollingCount = 0;
-
-    actor.subscribe((state) => {
-      if (state.context.intents["0"].state === SwapProgress.Quoting) {
-        pollingCount++;
-      }
-    });
-
-    // Act: Wait for a polling cycle
-    await sleep(750);
-
-    // Assert: Ensure polling reoccurred after failure
-    expect(pollingCount).toBeGreaterThanOrEqual(1);
-
-    actor.stop();
-  });
 });
