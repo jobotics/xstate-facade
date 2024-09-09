@@ -23,17 +23,17 @@ export type Context = {
 };
 
 export type Events =
-  | { type: "FETCH_QUOTE"; intentId: string }
-  | { type: "FETCH_QUOTE_SUCCESS"; intentId: string }
-  | { type: "FETCH_QUOTE_ERROR"; intentId: string }
-  | { type: "SUBMIT_SWAP"; intentId: string }
-  | { type: "SUBMIT_SWAP_SUCCESS"; intentId: string }
-  | { type: "SUBMIT_SWAP_ERROR"; intentId: string }
-  | { type: "CONFIRM_SWAP"; intentId: string }
-  | { type: "CONFIRM_SWAP_SUCCESS"; intentId: string }
-  | { type: "CONFIRM_SWAP_ERROR"; intentId: string }
-  | { type: "QUOTE_EXPIRED"; intentId: string }
-  | { type: "RETRY_INTENT"; intentId: string }
+  | { type: "FETCH_QUOTE" }
+  | { type: "FETCH_QUOTE_SUCCESS" }
+  | { type: "FETCH_QUOTE_ERROR" }
+  | { type: "SUBMIT_SWAP"; intent: Intent }
+  | { type: "SUBMIT_SWAP_SUCCESS" }
+  | { type: "SUBMIT_SWAP_ERROR" }
+  | { type: "CONFIRM_SWAP" }
+  | { type: "CONFIRM_SWAP_SUCCESS" }
+  | { type: "CONFIRM_SWAP_ERROR" }
+  | { type: "QUOTE_EXPIRED" }
+  | { type: "RETRY_INTENT"; intent: Intent }
   | { type: "SET_INTENT"; intent: Partial<Intent> };
 
 export type Input = {
