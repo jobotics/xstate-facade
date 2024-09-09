@@ -1,13 +1,17 @@
 import { assign, setup, fromPromise } from "xstate";
 import {
   Context,
-  IntentState,
-  SwapProgressEnum,
+  Events,
+  Input,
+  QuoteParams,
 } from "./interfaces/swap-machine.ex.interfaces";
-import { Events, Intent } from "./interfaces/swap-machine.in.interfaces";
 import { IntentProcessorService } from "./services/intent-processor.service";
 import { sleep } from "./utils/utils";
 import { ApiService } from "./services/api.service";
+import {
+  Intent,
+  SwapProgressEnum,
+} from "./interfaces/swap-machine.in.interfaces";
 
 const intentProcessorService = new IntentProcessorService(new ApiService());
 
@@ -15,11 +19,11 @@ export const swapMachine = setup({
   types: {
     context: {} as Context,
     events: {} as Events,
-    input: {} as { intentId?: string },
+    input: {} as Input | { intentId: string },
   },
   actions: {
     updateIntent: assign({
-      intent: (_, params: { intent: Partial<IntentState> }) => ({
+      intent: (_, params: { intent: Partial<Intent> }) => ({
         ..._.intent,
         ...params.intent,
       }),
@@ -42,42 +46,48 @@ export const swapMachine = setup({
         state: SwapProgressEnum.Failed,
       }),
     }),
-    recoverIntent: assign({
-      intent: ({ context }) =>
-        fromPromise(async () => {
-          const recoveredIntent = await intentProcessorService.initialize(
-            context.intent.intentId!,
-          );
-          return recoveredIntent || null;
-        }),
+    recoveringIntent: assign({
+      intent: (context, event) => {
+        if (context.event?.output) {
+          return context.event.output.intent;
+        }
+        return context.intent; // Fallback to current intent if no output
+      },
+      state: (context) => {
+        return context.event?.output?.state || context.state;
+      },
     }),
+    log: (context, event) => {
+      console.log("Current context:", JSON.stringify(context));
+      console.log("Current event:", JSON.stringify(event));
+    },
   },
   actors: {
     fetchQuotes: fromPromise(({ input }: { input: QuoteParams }) =>
-      intentProcessorService.fetchQuotes(input),
+      intentProcessorService.fetchQuotes(input).then((data) => data),
     ),
     submitSwap: fromPromise(({ input }: { input: { intent: Intent } }) =>
       initiateSwap(input.intent),
     ),
-    confirmSwap: fromPromise(({ input }: { input: { intentId: string } }) =>
+    confirmSwap: fromPromise(({ input }: { input: Pick<Intent, "intentId"> }) =>
       waitForExecution(input.intentId),
     ),
-    recoverIntent: fromPromise(({ input }) =>
-      new IntentProcessorService().initialize(input.intentId),
+    recoverIntent: fromPromise(
+      ({ input }: { input: Pick<Intent, "intentId"> }) =>
+        intentProcessorService.initialize(input.intentId).then((data) => data),
     ),
   },
   guards: {
     hasValidQuote: ({ context }) =>
       context.intent.state === SwapProgressEnum.Quoted,
-    hasValidIntent: ({ context }) =>
-      !!context.intent.intentId && Object.keys(context.intent).length === 1,
+    hasValidIntent: ({ context }) => !!context.intent.intentId,
     hasEnoughInfoForQuote: ({ context }) => {
       const intent = context.intent;
       return !!(
-        intent.defuseAssetIdEntifierIn &&
-        intent.defuseAssetIdEntifierOut &&
-        intent.amountIn &&
-        intent.intentType
+        intent?.assetIn &&
+        intent?.assetOut &&
+        intent?.amountIn &&
+        !intent?.status
       );
     },
   },
@@ -85,10 +95,12 @@ export const swapMachine = setup({
   id: "swapMachine",
   initial: "Idle",
   context: ({ input }) => ({
-    intent: input?.intentId ? { intentId: input.intentId } : {},
+    intent: input || {},
+    state: SwapProgressEnum.Idle,
   }),
   states: {
     Idle: {
+      entry: "log",
       type: "parallel",
       states: {
         recover: {
@@ -106,17 +118,12 @@ export const swapMachine = setup({
             recovering: {
               invoke: {
                 src: "recoverIntent",
-                input: ({ context }) => ({ intentId: context.intent.intentId }),
+                input: ({ context }) => ({
+                  intentId: context.intent.intentId,
+                }),
                 onDone: {
                   target: "done",
-                  actions: [
-                    assign({
-                      intent: (_, event) => ({
-                        ...event.output,
-                        state: event.output.status, // Map 'status' to 'state'
-                      }),
-                    }),
-                  ],
+                  actions: ["recoveringIntent", "log"],
                 },
                 onError: {
                   target: "done",
@@ -133,24 +140,21 @@ export const swapMachine = setup({
           initial: "polling",
           states: {
             polling: {
-              entry: [
+              always: [
                 {
-                  type: "updateIntent",
                   guard: "hasEnoughInfoForQuote",
-                  params: {
-                    intent: {
-                      state: SwapProgressEnum.Quoting,
-                    },
-                  },
+                  target: "fetching",
                 },
               ],
+            },
+            fetching: {
               invoke: {
                 src: "fetchQuotes",
                 input: ({ context }): QuoteParams => ({
                   defuseAssetIdEntifierIn: context.intent.assetIn,
                   defuseAssetIdEntifierOut: context.intent.assetOut,
                   amountIn: context.intent.amountIn,
-                  intentType: context.intent.intentType || "dip2", // Default to "dip2" if not specified
+                  intentType: context.intent.intentType || "dip2",
                 }),
                 onDone: {
                   target: "quoted",
@@ -216,7 +220,7 @@ export const swapMachine = setup({
       },
     },
     Submitting: {
-      entry: ["progressIntent"],
+      entry: ["progressIntent", "log"],
       invoke: {
         src: "submitSwap",
         input: ({ context }) => ({
@@ -233,7 +237,7 @@ export const swapMachine = setup({
       },
     },
     Confirming: {
-      entry: ["progressIntent"],
+      entry: ["progressIntent", "log"],
       invoke: {
         src: "confirmSwap",
         input: ({ context }) => ({

@@ -1,10 +1,12 @@
-import { SwapStatusEnum } from "../interfaces/swap-machine.in.interfaces";
-import { mapAssetKey } from "../maps/maps";
 import {
-  IntentState,
-  QuoteParams,
   SolverQuote,
   SwapProgressEnum,
+  SwapStatusEnum,
+} from "../interfaces/swap-machine.in.interfaces";
+import { mapAssetKey } from "../maps/maps";
+import {
+  Context,
+  QuoteParams,
 } from "src/interfaces/swap-machine.ex.interfaces";
 import { ApiService } from "./api.service";
 
@@ -18,7 +20,6 @@ export class IntentProcessorService {
       case SwapStatusEnum.Available:
         return SwapProgressEnum.Confirming;
       case SwapStatusEnum.Executed:
-      case SwapStatusEnum.Completed:
         return SwapProgressEnum.Confirmed;
       case SwapStatusEnum.RolledBack:
         return SwapProgressEnum.Failed;
@@ -27,9 +28,10 @@ export class IntentProcessorService {
     }
   }
 
-  async initialize(intentId: string): Promise<IntentState | null> {
+  async initialize(intentId: string): Promise<Context | null> {
     const intentDetails = await this.apiService.getIntent(intentId);
     if (!intentDetails) {
+      console.log("No intent details found");
       return null;
     }
     const intent = {
@@ -51,9 +53,12 @@ export class IntentProcessorService {
       amountOut: intentDetails.asset_out.amount,
       expiration: intentDetails.expiration.block_number,
       lockup: intentDetails.lockup_until.block_number,
-      status: this.initializeProgressStatusAdapter(intentDetails.status),
+      status: intentDetails.status,
     };
-    return intent;
+    return {
+      intent,
+      state: this.initializeProgressStatusAdapter(intentDetails.status),
+    };
   }
 
   async fetchQuotes(params: QuoteParams): Promise<SolverQuote[]> {

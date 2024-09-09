@@ -1,4 +1,4 @@
-import { Intent } from "./swap-machine.in.interfaces";
+import { Intent, SwapProgressEnum } from "./swap-machine.in.interfaces";
 
 /**
  * External interfaces for communication with xstate-facade.
@@ -15,25 +15,33 @@ import { Intent } from "./swap-machine.in.interfaces";
  * - QuoteList - abstract quoted list for UI adaptation.
  */
 
-export enum SwapProgressEnum {
-  Idle = "Idle",
-  Quoting = "Quoting",
-  Quoted = "Quoted",
-  Submitting = "Submitting",
-  Submitted = "Submitted",
-  Confirming = "Confirming",
-  Confirmed = "Confirmed",
-  Failed = "Failed",
-}
+export type Context = {
+  intent: Intent;
+  state: SwapProgressEnum;
+};
+
+export type Events =
+  | { type: "FETCH_QUOTE"; intentId: string }
+  | { type: "FETCH_QUOTE_SUCCESS"; intentId: string }
+  | { type: "FETCH_QUOTE_ERROR"; intentId: string }
+  | { type: "SUBMIT_SWAP"; intentId: string }
+  | { type: "SUBMIT_SWAP_SUCCESS"; intentId: string }
+  | { type: "SUBMIT_SWAP_ERROR"; intentId: string }
+  | { type: "CONFIRM_SWAP"; intentId: string }
+  | { type: "CONFIRM_SWAP_SUCCESS"; intentId: string }
+  | { type: "CONFIRM_SWAP_ERROR"; intentId: string }
+  | { type: "QUOTE_EXPIRED"; intentId: string }
+  | { type: "RETRY_INTENT"; intentId: string }
+  | { type: "SET_INTENT"; intent: Partial<Intent> };
 
 export type Input = {
   assetIn: Asset;
   assetOut: Asset;
   amountIn: string;
   amountOut: string;
-  accountID: string;
+  accountId: string;
   // Next entities aim for cross-swap
-  solverID?: string;
+  solverId?: string;
   accountFrom?: string;
   accountTo?: string;
   // Next entities aim for time execution
@@ -48,18 +56,6 @@ export type Asset = {
   metadataLink: string;
   routes: string[];
 };
-
-export type IntentState = Intent & {
-  status: SwapProgressEnum;
-  proof?: string;
-  referral?: string;
-};
-
-export type Context = {
-  intent: Record<string, IntentState>;
-  current: string;
-};
-
 export interface QuoteParams {
   defuseAssetIdEntifierIn: string;
   defuseAssetIdEntifierOut: string;
@@ -70,11 +66,6 @@ export interface QuoteParams {
 export type AssetList = Asset[];
 
 export type QuoteList = {
-  solverID: string;
+  solverId: string;
   amountOut: string;
 }[];
-
-export interface SolverQuote {
-  solver_id: string;
-  amount_out: string;
-}

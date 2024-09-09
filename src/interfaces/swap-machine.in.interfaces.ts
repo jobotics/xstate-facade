@@ -14,9 +14,19 @@ export interface NearHttpResponse<T> extends HttpResponse<{ result: T }> {
   };
 }
 
+export enum SwapProgressEnum {
+  Idle = "Idle",
+  Quoting = "Quoting",
+  Quoted = "Quoted",
+  Submitting = "Submitting",
+  Submitted = "Submitted",
+  Confirming = "Confirming",
+  Confirmed = "Confirmed",
+  Failed = "Failed",
+}
+
 export enum SwapStatusEnum {
   Available = "available",
-  Completed = "Completed",
   Executed = "executed",
   RolledBack = "rolled_back",
 }
@@ -27,10 +37,6 @@ export enum AssetTypeEnum {
   cross_chain = "cross_chain",
 }
 
-export type BackupIntent = {
-  intentId: string;
-};
-
 export type Intent = {
   intentId: string;
   initiator: string;
@@ -40,21 +46,10 @@ export type Intent = {
   amountOut: string;
   expiration?: number;
   lockup?: number;
+  status?: SwapStatusEnum;
+  proof?: string;
+  referral?: string;
 };
-
-export type Events =
-  | { type: "FETCH_QUOTE"; intentId: string }
-  | { type: "FETCH_QUOTE_SUCCESS"; intentId: string }
-  | { type: "FETCH_QUOTE_ERROR"; intentId: string }
-  | { type: "SUBMIT_SWAP"; intentId: string }
-  | { type: "SUBMIT_SWAP_SUCCESS"; intentId: string }
-  | { type: "SUBMIT_SWAP_ERROR"; intentId: string }
-  | { type: "CONFIRM_SWAP"; intentId: string }
-  | { type: "CONFIRM_SWAP_SUCCESS"; intentId: string }
-  | { type: "CONFIRM_SWAP_ERROR"; intentId: string }
-  | { type: "QUOTE_EXPIRED"; intentId: string }
-  | { type: "RETRY_INTENT"; intentId: string }
-  | { type: "SET_INTENT"; intent: Partial<IntentState> };
 
 export type AbstractAsset = {
   type: AssetTypeEnum;
@@ -82,3 +77,8 @@ export type IntentDetails = {
   referral: string;
   proof: string;
 };
+
+export interface SolverQuote {
+  solver_id: string;
+  amount_out: string;
+}

@@ -1,8 +1,9 @@
+import { Context } from "src/interfaces/swap-machine.ex.interfaces";
 import {
-  IntentState,
+  Intent,
   SwapProgressEnum,
-} from "src/interfaces/swap-machine.ex.interfaces";
-import { Intent } from "src/interfaces/swap-machine.in.interfaces";
+  SwapStatusEnum,
+} from "src/interfaces/swap-machine.in.interfaces";
 
 export const mockInput = {
   assetIn: {
@@ -58,10 +59,11 @@ export const mockGetIntent: Intent = {
   amountOut: "1970026",
   expiration: 126319840,
   lockup: 126319840,
+  proof: "0x3fc1b193ad081ff8634fa1905dab46ba7492c0c45fc69a9cfe7840ec8a03cb7a",
+  status: SwapStatusEnum.Executed,
 };
 
-export const mockIntentState: IntentState = {
+export const mockIntentState: Context = {
   status: SwapProgressEnum.Confirmed,
-  proof: "0x3fc1b193ad081ff8634fa1905dab46ba7492c0c45fc69a9cfe7840ec8a03cb7a",
   ...mockGetIntent,
 };

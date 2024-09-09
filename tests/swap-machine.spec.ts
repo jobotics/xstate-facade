@@ -1,13 +1,8 @@
 import { describe, it, expect, vi } from "vitest";
 import { createActor, fromPromise } from "xstate";
 import { swapMachine } from "../src";
-import {
-  mockGetIntent,
-  mockInitialState,
-  mockIntentId,
-  mockIntentState,
-} from "../src/mocks/mocks";
-import { SwapProgressEnum } from "../src/interfaces/swap-machine.ex.interfaces";
+import { mockIntentId } from "../src/mocks/mocks";
+import { SwapProgressEnum } from "../src/interfaces/swap-machine.in.interfaces";
 
 describe("swapMachine", () => {
   // Arrange
@@ -30,37 +25,33 @@ describe("swapMachine", () => {
     actor.stop();
   });
 
-  it("should initialize with provided inputs", async () => {
-    const mockIntentProcessorService = {
-      initialize: vi.fn().mockResolvedValue({
-        ...mockIntentState,
-        status: mockIntentState.status,
-      }),
-    };
-
-    const testMachine = swapMachine.provide({
-      actors: {
-        recoverIntent: fromPromise(({ input }) =>
-          mockIntentProcessorService.initialize(input.intentId),
-        ),
-      },
-    });
-
-    const actor = createActor(testMachine, {
+  it("should initialize with provided inputs and transition through states", async () => {
+    const actor = createActor(swapMachine, {
       input: { intentId: mockIntentId },
     }).start();
 
-    await actor.getSnapshot().done;
-
-    expect(mockIntentProcessorService.initialize).toHaveBeenCalledWith(
-      mockIntentId,
-    );
+    await sleep(2000);
 
     const snapshot = actor.getSnapshot();
-    expect(snapshot.context.intent).toEqual({
-      ...mockIntentState,
-      status: mockIntentState.status,
+
+    // Check if the intent is initialized
+    expect(snapshot.context.intent).toBeDefined();
+    expect(snapshot.context.intent.intentId).toBe(mockIntentId);
+
+    // Check if the state is correct
+    expect(snapshot.value).toEqual({
+      Idle: expect.objectContaining({
+        recover: "done",
+        quote: "polling",
+        input: {},
+      }),
     });
+
+    // Check if the intent has been recovered
+    expect(snapshot.context.intent.assetIn).toBeDefined();
+    expect(snapshot.context.intent.assetOut).toBeDefined();
+    expect(snapshot.context.intent.amountIn).toBeDefined();
+    expect(snapshot.context.state).toBe(SwapProgressEnum.Confirmed);
 
     actor.stop();
   });

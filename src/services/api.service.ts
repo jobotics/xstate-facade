@@ -24,16 +24,16 @@ export class ApiService {
     try {
       const payload = {
         jsonrpc: "2.0",
-        id: 1,
+        id: "dontcare",
         method: "query",
         params: {
           request_type: "call_function",
+          finality: "final",
           account_id: protocolId,
           method_name: "get_intent",
           args_base64: Buffer.from(JSON.stringify({ id: intentId })).toString(
             "base64",
           ),
-          finality: "final",
         },
       };
       const response = await this.httpService.post<
