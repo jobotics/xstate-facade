@@ -4,14 +4,13 @@ import {
   HttpResponse,
   IntentDetails,
   NearHttpResponse,
-} from "../interfaces/swap-machine.in.interfaces";
-import {
-  QuoteParams,
   SolverQuote,
-} from "src/interfaces/swap-machine.ex.interfaces";
+} from "../interfaces/swap-machine.in.interfaces";
+import { QuoteParams } from "src/interfaces/swap-machine.ex.interfaces";
 
 const rpc = "https://nearrpc.aurora.dev";
 const protocolId = "swap-defuse.near";
+const solverRelay = "https://solver-relay.chaindefuser.com/rpc";
 
 export class ApiService {
   private httpService: HttpService;
@@ -23,8 +22,8 @@ export class ApiService {
   async getIntent(intentId: string): Promise<IntentDetails | null> {
     try {
       const payload = {
-        jsonrpc: "2.0",
         id: "dontcare",
+        jsonrpc: "2.0",
         method: "query",
         params: {
           request_type: "call_function",
@@ -59,23 +58,25 @@ export class ApiService {
   async getQuotes(params: QuoteParams): Promise<SolverQuote[]> {
     try {
       const payload = {
+        id: "dontcare",
         jsonrpc: "2.0",
-        id: 1,
-        method: "query",
+        method: "quote",
         params: [
           {
-            defuse_asset_identifier_in: params.defuseAssetIdEntifierIn,
-            defuse_asset_identifier_out: params.defuseAssetIdEntifierOut,
+            defuse_asset_identifier_in: params.assetIn,
+            defuse_asset_identifier_out: params.assetOut,
             amount_in: params.amountIn,
-            intent_type: params.intentType,
+            intent_type: "dip2",
           },
         ],
       };
-      const response = await this.httpService.post<
-        NearHttpResponse<SolverQuote[]>
-      >(rpc, payload);
-      if (response?.result?.result?.length > 0) {
-        return response.result.result;
+      const response = await this.httpService.post<HttpResponse<SolverQuote[]>>(
+        solverRelay,
+        payload,
+      );
+      console.log(response, "response");
+      if (response?.result?.length > 0) {
+        return response.result;
       } else {
         console.error("Unexpected response format:", response);
         return [];

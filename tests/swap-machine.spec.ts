@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { createActor, fromPromise } from "xstate";
 import { swapMachine } from "../src";
-import { mockIntentId } from "../src/mocks/mocks";
+import { mockInput, mockIntentId, mockQuote } from "../src/mocks/mocks";
 import { SwapProgressEnum } from "../src/interfaces/swap-machine.in.interfaces";
 
 describe("swapMachine", () => {
@@ -56,31 +56,29 @@ describe("swapMachine", () => {
     actor.stop();
   });
 
-  it.skip("should handle input and set intents", () => {
+  it("should handle input and set intent", async () => {
     const actor = createActor(swapMachine).start();
 
     // Act: Set intent
     actor.send({
       type: "SET_INTENT",
-      intent: {
-        intentId: "1",
-        assetIn: "ETH",
-        assetOut: "USDT",
-        amountIn: "0.5",
-        initiator: "user.near",
-      },
+      intent: mockQuote,
     });
+
+    await sleep(2000);
 
     // Assert: Check context
     const snapshot = actor.getSnapshot();
-    expect(snapshot.context.current).toBe("1");
-    expect(snapshot.context.intents["1"]).toMatchObject({
-      intentId: "1",
-      assetIn: "ETH",
-      assetOut: "USDT",
-      amountIn: "0.5",
-      initiator: "user.near",
-    });
+
+    expect(snapshot.context.intent).toBeDefined();
+    expect(snapshot.context.quotes).toBeInstanceOf(Array);
+
+    if (snapshot.context.quotes.length > 0) {
+      expect(snapshot.context.quotes[0]).toHaveProperty("solver_id");
+      expect(snapshot.context.quotes[0]).toHaveProperty("amount_out");
+    }
+
+    expect(snapshot.context.state).toBe(SwapProgressEnum.Quoted);
 
     actor.stop();
   });

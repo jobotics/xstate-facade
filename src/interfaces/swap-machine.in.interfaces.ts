@@ -2,8 +2,6 @@
  * Internal interfaces, for describing types inside swap-machines and not exposed out.
  */
 
-import { IntentState } from "./swap-machine.ex.interfaces";
-
 export interface HttpResponse<T> {
   result: T;
 }
@@ -56,6 +54,14 @@ export type AbstractAsset = {
   oracle?: string;
   asset?: string;
   token?: string;
+};
+
+export type Asset = {
+  defuseAssetId: string;
+  decimals: number;
+  assetName: string;
+  metadataLink: string;
+  routes: string[];
 };
 
 export type IntentDetails = {

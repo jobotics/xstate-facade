@@ -3,6 +3,7 @@ import {
   Context,
   Events,
   Input,
+  Quote,
   QuoteParams,
 } from "./interfaces/swap-machine.ex.interfaces";
 import { IntentProcessorService } from "./services/intent-processor.service";
@@ -16,23 +17,24 @@ import {
 const intentProcessorService = new IntentProcessorService(new ApiService());
 
 export const swapMachine = setup({
-  types: {
-    context: {} as Context,
-    events: {} as Events,
-    input: {} as Input | { intentId: string },
+  types: {} as {
+    context: Context;
+    events: Events;
+    input: Input | { intentId: string };
+    output: {
+      quotes: Quote[];
+    };
   },
   actions: {
+    fetchingQuotes: assign({
+      quotes: ({ event }) => event.output.quotes,
+      state: SwapProgressEnum.Quoted,
+    }),
     updateIntent: assign({
       intent: (_, params: { intent: Partial<Intent> }) => ({
         ..._.intent,
         ...params.intent,
       }),
-    }),
-    selectIntent: assign({
-      current: (_, params: { intentID: string }) => params.intentID,
-    }),
-    selectIntent: assign({
-      current: (_, params: { intentID: string }) => params.intentID,
     }),
     progressIntent: assign({
       intent: (context) => ({
@@ -64,7 +66,9 @@ export const swapMachine = setup({
   },
   actors: {
     fetchQuotes: fromPromise(({ input }: { input: QuoteParams }) =>
-      intentProcessorService.fetchQuotes(input).then((data) => data),
+      intentProcessorService
+        .fetchQuotes(input)
+        .then((data) => ({ quotes: data })),
     ),
     submitSwap: fromPromise(({ input }: { input: { intent: Intent } }) =>
       initiateSwap(input.intent),
@@ -90,6 +94,10 @@ export const swapMachine = setup({
         !intent?.status
       );
     },
+    hasValidQuoteParams: ({ event }) => {
+      const intent = event.intent;
+      return !!(intent?.assetIn && intent?.assetOut && intent?.amountIn);
+    },
   },
 }).createMachine({
   id: "swapMachine",
@@ -97,6 +105,7 @@ export const swapMachine = setup({
   context: ({ input }) => ({
     intent: input || {},
     state: SwapProgressEnum.Idle,
+    quotes: [],
   }),
   states: {
     Idle: {
@@ -151,29 +160,15 @@ export const swapMachine = setup({
               invoke: {
                 src: "fetchQuotes",
                 input: ({ context }): QuoteParams => ({
-                  defuseAssetIdEntifierIn: context.intent.assetIn,
-                  defuseAssetIdEntifierOut: context.intent.assetOut,
-                  amountIn: context.intent.amountIn,
-                  intentType: context.intent.intentType || "dip2",
+                  ...context.intent,
                 }),
                 onDone: {
                   target: "quoted",
-                  actions: [
-                    "progressIntent",
-                    {
-                      type: "updateIntent",
-                      params: ({ event }) => ({
-                        intent: {
-                          quotes: event.output,
-                          state: SwapProgressEnum.Quoted,
-                        },
-                      }),
-                    },
-                  ],
+                  actions: "fetchingQuotes",
                 },
                 onError: {
                   target: "none",
-                  actions: ["failIntent"],
+                  actions: "failIntent",
                 },
               },
             },
@@ -194,27 +189,22 @@ export const swapMachine = setup({
         },
         input: {
           on: {
-            SUBMIT_SWAP: {
-              target: "#swapMachine.Submitting",
-              guard: "hasValidQuote",
-            },
             SET_INTENT: {
               target: "#swapMachine.Idle.quote",
+              guard: "hasValidQuoteParams",
               actions: [
-                {
-                  type: "selectIntent",
-                  params: ({ event }) => ({
-                    intentId: event.intent.intentId!,
-                  }),
-                },
                 {
                   type: "updateIntent",
                   params: ({ event }) => ({
-                    intent: { ...event.intent, state: SwapProgressEnum.Idle },
+                    intent: { ...event.intent },
                   }),
                 },
               ],
             },
+          },
+          SUBMIT_SWAP: {
+            target: "#swapMachine.Submitting",
+            guard: "hasValidQuote",
           },
         },
       },

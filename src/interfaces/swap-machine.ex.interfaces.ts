@@ -1,5 +1,6 @@
 import { Intent, SwapProgressEnum } from "./swap-machine.in.interfaces";
 
+// TODO : refactor this description
 /**
  * External interfaces for communication with xstate-facade.
  * It is assumed that all other swap-machines will have adapters from internal to external interfaces.
@@ -18,6 +19,7 @@ import { Intent, SwapProgressEnum } from "./swap-machine.in.interfaces";
 export type Context = {
   intent: Intent;
   state: SwapProgressEnum;
+  quotes: Quote[];
 };
 
 export type Events =
@@ -35,8 +37,8 @@ export type Events =
   | { type: "SET_INTENT"; intent: Partial<Intent> };
 
 export type Input = {
-  assetIn: Asset;
-  assetOut: Asset;
+  assetIn: string;
+  assetOut: string;
   amountIn: string;
   amountOut: string;
   accountId: string;
@@ -48,24 +50,13 @@ export type Input = {
   expiration?: number;
   lockup?: boolean;
 };
-
-export type Asset = {
-  defuseAssetId: string;
-  decimals: number;
-  assetName: string;
-  metadataLink: string;
-  routes: string[];
-};
 export interface QuoteParams {
-  defuseAssetIdEntifierIn: string;
-  defuseAssetIdEntifierOut: string;
+  assetIn: string;
+  assetOut: string;
   amountIn: string;
-  intentType: string;
 }
 
-export type AssetList = Asset[];
-
-export type QuoteList = {
+export type Quote = {
   solverId: string;
   amountOut: string;
-}[];
+};
