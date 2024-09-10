@@ -7,10 +7,7 @@ import {
   SolverQuote,
 } from "../interfaces/swap-machine.in.interfaces";
 import { QuoteParams } from "src/interfaces/swap-machine.ex.interfaces";
-
-const rpc = "https://nearrpc.aurora.dev";
-const protocolId = "swap-defuse.near";
-const solverRelay = "https://solver-relay.chaindefuser.com/rpc";
+import { NEAR_RPC, PROTOCOL_ID, SOLVER_RELAY } from "src/constants/constants";
 
 export class ApiService {
   private httpService: HttpService;
@@ -28,7 +25,7 @@ export class ApiService {
         params: {
           request_type: "call_function",
           finality: "final",
-          account_id: protocolId,
+          account_id: PROTOCOL_ID,
           method_name: "get_intent",
           args_base64: Buffer.from(JSON.stringify({ id: intentId })).toString(
             "base64",
@@ -37,7 +34,7 @@ export class ApiService {
       };
       const response = await this.httpService.post<
         NearHttpResponse<Uint8Array>
-      >(rpc, payload);
+      >(NEAR_RPC, payload);
       if (response?.result?.result) {
         const byteArray = new Uint8Array(response.result.result);
         const decoder = new TextDecoder();
@@ -71,7 +68,7 @@ export class ApiService {
         ],
       };
       const response = await this.httpService.post<HttpResponse<SolverQuote[]>>(
-        solverRelay,
+        SOLVER_RELAY,
         payload,
       );
       console.log(response, "response");

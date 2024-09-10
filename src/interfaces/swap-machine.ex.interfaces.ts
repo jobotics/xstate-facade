@@ -42,13 +42,14 @@ export type Input = {
   amountIn: string;
   amountOut: string;
   accountId: string;
+  referral?: string;
   // Next entities aim for cross-swap
   solverId?: string;
   accountFrom?: string;
   accountTo?: string;
   // Next entities aim for time execution
   expiration?: number;
-  lockup?: boolean;
+  lockup?: number;
 };
 export interface QuoteParams {
   assetIn: string;

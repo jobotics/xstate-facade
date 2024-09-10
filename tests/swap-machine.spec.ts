@@ -1,7 +1,12 @@
 import { describe, it, expect, vi } from "vitest";
 import { createActor, fromPromise } from "xstate";
 import { swapMachine } from "../src";
-import { mockInput, mockIntentId, mockQuote } from "../src/mocks/mocks";
+import {
+  mockInput,
+  mockIntent,
+  mockIntentId,
+  mockQuote,
+} from "../src/mocks/mocks";
 import { SwapProgressEnum } from "../src/interfaces/swap-machine.in.interfaces";
 import { IntentProcessorServiceMock } from "../src/mocks/intent-processor.service.mock";
 
@@ -162,16 +167,18 @@ describe("swapMachine", () => {
     actor.stop();
   }, 35000); // Keep the timeout at 35 seconds for safety
 
-  it.skip("should transition to Submitting state on swap submission", async () => {
+  it.only("should transition to Submitting state on swap submission", async () => {
     const actor = createActor(swapMachine).start();
 
     // Act: Submit swap
-    await sleep(200);
-    actor.send({ type: "SUBMIT_SWAP", intentId: "0" });
+    actor.send({ type: "SUBMIT_SWAP", intent: mockInput });
+
+    await sleep(2000);
 
     // Assert: Ensure transition to Submitting state
     const snapshot = actor.getSnapshot();
-    expect(snapshot.context.intents["0"].state).toBe(SwapProgress.Submitting);
+    console.log("snapshot", snapshot.context);
+    expect(snapshot.context.state).toBe(SwapProgressEnum.Submitting);
 
     actor.stop();
   });

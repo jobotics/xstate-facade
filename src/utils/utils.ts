@@ -1,4 +1,5 @@
 import { createHash } from "crypto";
+import { ParseDefuseAssetResult } from "src/interfaces/swap-machine.in.interfaces";
 import { v4 as uuidv4 } from "uuid";
 
 export async function sleep(timeout: number) {
@@ -11,4 +12,20 @@ export function sha256(msg: string) {
 
 export function generateIntentId(): string {
   return sha256(uuidv4());
+}
+
+export default function parseDefuseAsset(
+  defuseAssetId: string,
+): ParseDefuseAssetResult {
+  try {
+    const [blockchain, network, contractId] = defuseAssetId.split(":");
+    return {
+      blockchain,
+      network,
+      contractId,
+    };
+  } catch (e) {
+    console.error("Failed to parse defuse asset id", e);
+    return null;
+  }
 }

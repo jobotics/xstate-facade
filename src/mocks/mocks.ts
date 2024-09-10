@@ -38,11 +38,14 @@ export const mockAssetOutSelector = {
 };
 
 export const mockInput: Input = {
-  assetIn: "aaaaaa20d9e0e2461697782ef11675f668207961.factory.bridge.near",
+  assetIn:
+    "near:mainnet:17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1",
   assetOut: "eth:8453:0x2Fa2EdA29225ab5DE488597e2201838eC5D28261",
   amountIn: "100000000000000000",
   amountOut: "252086045407911457701",
   accountId: "75d44b5a0f717b05cfa0a5869f5245a28bf21f1e9d13778c2e7e176b5ffb1a8d",
+  solverId: "fomo-solver-2.near",
+  accountTo: "0xd9f9fcf89743C6a6E7F19bc1AB7Ffe20b24771AA",
 };
 
 export const mockIntent = {
@@ -71,4 +74,5 @@ export const mockGetIntent: Intent = {
 export const mockIntentState: Context = {
   intent: mockGetIntent,
   state: SwapProgressEnum.Confirmed,
+  quotes: [],
 };

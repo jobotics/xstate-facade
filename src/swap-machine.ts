@@ -1,4 +1,4 @@
-import { assign, setup, fromPromise } from "xstate";
+import { assign, setup, fromPromise, sendTo } from "xstate";
 import {
   Context,
   Events,
@@ -37,7 +37,7 @@ export const swapMachine = setup({
       }),
     }),
     progressIntent: assign({
-      intent: (context) => ({
+      intent: (context, event) => ({
         ...context.intent,
         state: SwapProgressEnum.Confirming,
       }),
@@ -63,6 +63,12 @@ export const swapMachine = setup({
       console.log("Current context:", JSON.stringify(context));
       console.log("Current event:", JSON.stringify(event));
     },
+    updateCallData: assign({
+      intent: (context, event) => ({
+        ...context.intent,
+        callData: event?.output?.callData || null, // Use optional chaining and provide a fallback
+      }),
+    }),
   },
   actors: {
     fetchQuotes: fromPromise(({ input }: { input: QuoteParams }) =>
@@ -70,8 +76,12 @@ export const swapMachine = setup({
         .fetchQuotes(input)
         .then((data) => ({ quotes: data })),
     ),
-    submitSwap: fromPromise(({ input }: { input: { intent: Intent } }) =>
-      initiateSwap(input.intent),
+    submitingSwap: fromPromise(({ input }: { input: { intent: Input } }) =>
+      intentProcessorService
+        .prepareSwapCallData(input.intent)
+        .then((callData) => ({
+          callData,
+        })),
     ),
     confirmSwap: fromPromise(({ input }: { input: Pick<Intent, "intentId"> }) =>
       waitForExecution(input.intentId),
@@ -98,6 +108,17 @@ export const swapMachine = setup({
       const intent = event.intent;
       return !!(intent?.assetIn && intent?.assetOut && intent?.amountIn);
     },
+    hasValidSubmitSwapParams: ({ event }) => {
+      console.log("hasValidSubmitSwapParams", event);
+      const intent = event.intent;
+      return !!(
+        intent?.assetIn &&
+        intent?.assetOut &&
+        intent?.amountIn &&
+        intent?.amountOut &&
+        intent?.accountId
+      );
+    },
   },
 }).createMachine({
   id: "swapMachine",
@@ -109,7 +130,6 @@ export const swapMachine = setup({
   }),
   states: {
     Idle: {
-      entry: "log",
       type: "parallel",
       states: {
         recover: {
@@ -201,28 +221,57 @@ export const swapMachine = setup({
                 },
               ],
             },
-          },
-          SUBMIT_SWAP: {
-            target: "#swapMachine.Submitting",
-            guard: "hasValidQuote",
+            SUBMIT_SWAP: {
+              target: "#swapMachine.Submitting",
+              guard: "hasValidSubmitSwapParams",
+              actions: [
+                {
+                  type: "updateIntent",
+                  params: ({ event }) => ({
+                    intent: { ...event.intent },
+                  }),
+                },
+              ],
+            },
           },
         },
       },
     },
     Submitting: {
-      entry: ["progressIntent", "log"],
       invoke: {
-        src: "submitSwap",
+        src: "submitingSwap",
         input: ({ context }) => ({
-          intent: context.intents[context.current],
+          intent: context.intent,
         }),
         onDone: {
-          target: "Confirming",
-          actions: ["progressIntent"],
+          target: "WaitingForSignature",
+          actions: [
+            "updateCallData", // Use the new action
+            sendTo(
+              ({ self }) => self,
+              (context, event) => ({
+                type: "SUBMIT_SWAP_SUCCESS",
+                data: { callData: event?.output?.callData || null },
+              }),
+            ),
+          ],
         },
         onError: {
           target: "Failed",
           actions: ["failIntent"],
+        },
+      },
+    },
+    WaitingForSignature: {
+      on: {
+        SIGN_AND_SUBMIT: {
+          target: "Confirming",
+          actions: assign({
+            intent: (context, event) => ({
+              ...context.intent,
+              transactionHash: event.transactionHash,
+            }),
+          }),
         },
       },
     },
