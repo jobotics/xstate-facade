@@ -24,10 +24,10 @@ export type Context = {
 
 export type Events =
   | { type: "FETCH_QUOTE" }
-  | { type: "FETCH_QUOTE_SUCCESS" }
+  | { type: "FETCH_QUOTE_SUCCESS"; data: { quotes: Quote[] } }
   | { type: "FETCH_QUOTE_ERROR" }
   | { type: "SUBMIT_SWAP"; intent: Intent }
-  | { type: "SUBMIT_SWAP_SUCCESS" }
+  | { type: "SUBMIT_SWAP_SUCCESS"; data: { callData: any } }
   | { type: "SUBMIT_SWAP_ERROR" }
   | { type: "CONFIRM_SWAP" }
   | { type: "CONFIRM_SWAP_SUCCESS" }

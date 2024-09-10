@@ -19,15 +19,12 @@ import { Input } from "src/interfaces/swap-machine.ex.interfaces";
  * - Use Solana chain ids - mainnet or other.
  */
 export const mapCreateIntentTransactionCall = (input: Input): any => {
-  console.log("input.assetIn>>>>>>>>", input.assetIn);
-  console.log("input.assetOut>>>>>>>>", input.assetOut);
   const from = parseDefuseAsset(input.assetIn);
   const fromNetworkId =
     `${from?.blockchain}:${from?.network}` as MapsNetworkEnum;
   const to = parseDefuseAsset(input.assetOut);
   const toNetworkId = `${to?.blockchain}:${to?.network}` as MapsNetworkEnum;
-  console.log("fromNetworkId>>>>>>>>", fromNetworkId);
-  console.log("toNetworkId>>>>>>>>", toNetworkId);
+
   switch (fromNetworkId) {
     case MapsNetworkEnum.NearMainnet:
       switch (toNetworkId) {

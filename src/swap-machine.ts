@@ -27,7 +27,12 @@ export const swapMachine = setup({
   },
   actions: {
     fetchingQuotes: assign({
-      quotes: ({ event }) => event.output.quotes,
+      quotes: ({ event }) => {
+        if ("data" in event && "quotes" in event.data) {
+          return event.data.quotes;
+        }
+        return [];
+      },
       state: SwapProgressEnum.Quoted,
     }),
     updateIntent: assign({
@@ -109,7 +114,6 @@ export const swapMachine = setup({
       return !!(intent?.assetIn && intent?.assetOut && intent?.amountIn);
     },
     hasValidSubmitSwapParams: ({ event }) => {
-      console.log("hasValidSubmitSwapParams", event);
       const intent = event.intent;
       return !!(
         intent?.assetIn &&
@@ -283,8 +287,8 @@ export const swapMachine = setup({
           intentId: context.current,
         }),
         onDone: {
-          target: "Confirmed",
-          actions: ["progressIntent"], // TODO: set tx hash
+          target: "Confirming",
+          actions: ["progressIntent"],
         },
         onError: {
           target: "Failed",
@@ -304,11 +308,6 @@ export const swapMachine = setup({
 });
 
 type ActionResult = { intentId: string; result: boolean };
-
-async function initiateSwap({ intentId }: Intent): Promise<ActionResult> {
-  await sleep(200);
-  return Promise.resolve({ intentId, result: true });
-}
 
 async function waitForExecution(intentId: string): Promise<ActionResult> {
   await sleep(1000);

@@ -1,4 +1,5 @@
-import { createHash } from "crypto";
+import SHA256 from "crypto-js/sha256";
+import Hex from "crypto-js/enc-hex";
 import { ParseDefuseAssetResult } from "src/interfaces/swap-machine.in.interfaces";
 import { v4 as uuidv4 } from "uuid";
 
@@ -7,7 +8,7 @@ export async function sleep(timeout: number) {
 }
 
 export function sha256(msg: string) {
-  return createHash("sha256").update(msg).digest("hex");
+  return SHA256(msg).toString(Hex);
 }
 
 export function generateIntentId(): string {

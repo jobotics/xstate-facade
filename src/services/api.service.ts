@@ -71,7 +71,6 @@ export class ApiService {
         SOLVER_RELAY,
         payload,
       );
-      console.log(response, "response");
       if (response?.result?.length > 0) {
         return response.result;
       } else {
