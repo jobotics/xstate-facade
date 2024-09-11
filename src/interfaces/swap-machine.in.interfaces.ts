@@ -13,14 +13,15 @@ export interface NearHttpResponse<T> extends HttpResponse<{ result: T }> {
 }
 
 export enum SwapProgressEnum {
-  Idle = "Idle",
+  Loading = "Loading",
   Quoting = "Quoting",
   Quoted = "Quoted",
   Submitting = "Submitting",
   Submitted = "Submitted",
+  Swapping = "Swapping",
+  Swapped = "Swapped",
   Confirming = "Confirming",
   Confirmed = "Confirmed",
-  Failing = "Failing",
   Failed = "Failed",
 }
 

@@ -33,13 +33,13 @@ export class IntentProcessorService {
   ): SwapProgressEnum {
     switch (status) {
       case SwapStatusEnum.Available:
-        return SwapProgressEnum.Confirming;
+        return SwapProgressEnum.Swapping;
       case SwapStatusEnum.Executed:
         return SwapProgressEnum.Confirming;
       case SwapStatusEnum.RolledBack:
         return SwapProgressEnum.Failing;
       default:
-        return SwapProgressEnum.Idle;
+        return SwapProgressEnum.Failing;
     }
   }
 
@@ -247,22 +247,22 @@ export class IntentProcessorService {
 
   next(state: SwapProgressEnum): SwapProgressEnum {
     switch (state) {
-      case SwapProgressEnum.Idle:
+      case SwapProgressEnum.Loading:
         return SwapProgressEnum.Quoting;
       case SwapProgressEnum.Quoting:
         return SwapProgressEnum.Quoted;
       case SwapProgressEnum.Quoted:
         return SwapProgressEnum.Submitting;
       case SwapProgressEnum.Submitting:
-        return SwapProgressEnum.Submitted;
-      case SwapProgressEnum.Submitted:
-        return SwapProgressEnum.Confirming;
-      case SwapProgressEnum.Confirming:
+        return SwapProgressEnum.Swapping;
+      case SwapProgressEnum.Swapping:
+        return SwapProgressEnum.Swapped;
+      case SwapProgressEnum.Swapped:
         return SwapProgressEnum.Confirmed;
-      case SwapProgressEnum.Failing:
-        return SwapProgressEnum.Failed;
+      case SwapProgressEnum.Failed:
+        return SwapProgressEnum.Submitting;
       default:
-        return SwapProgressEnum.Idle;
+        return SwapProgressEnum.Loading;
     }
   }
 }

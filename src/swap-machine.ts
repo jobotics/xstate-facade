@@ -7,7 +7,6 @@ import {
   QuoteParams,
 } from "./interfaces/swap-machine.ex.interfaces";
 import { IntentProcessorService } from "./services/intent-processor.service";
-import { sleep } from "./utils/utils";
 import { ApiService } from "./services/api.service";
 import {
   Intent,
@@ -124,168 +123,89 @@ export const swapMachine = setup({
   },
 }).createMachine({
   id: "swapMachine",
-  initial: "Idle",
+  initial: "Loading",
   context: ({ input }) => ({
     intent: input || {},
-    state: SwapProgressEnum.Idle,
+    state: SwapProgressEnum.Loading,
     quotes: [],
   }),
   states: {
-    Idle: {
-      type: "parallel",
+    Loading: {
+      initial: "loading",
       states: {
-        recover: {
-          initial: "checking",
-          states: {
-            checking: {
-              always: [
-                {
-                  target: "recovering",
-                  guard: "hasValidIntent",
-                },
-                { target: "done" },
-              ],
+        loading: {
+          always: [
+            {
+              target: "recovering",
+              guard: "hasValidIntent",
             },
-            recovering: {
-              invoke: {
-                src: "recoverIntent",
-                input: ({ context }) => ({
-                  intentId: context.intent.intentId,
-                }),
-                onDone: {
-                  target: "done",
-                  actions: ["recoveringIntent", "log"],
-                },
-                onError: {
-                  target: "done",
-                  actions: "failIntent",
-                },
-              },
+            {
+              target: "#swapMachine.Quoting",
+              guard: "hasEnoughInfoForQuote",
             },
-            done: {
-              type: "final",
+            { target: "waitingForInput" },
+          ],
+        },
+        recovering: {
+          invoke: {
+            src: "recoverIntent",
+            input: ({ context }) => ({
+              intentId: context.intent.intentId,
+            }),
+            onDone: {
+              target: "#swapMachine.Quoting",
+              actions: ["progressIntent"],
+            },
+            onError: {
+              target: "waitingForInput",
+              actions: ["failIntent"],
             },
           },
         },
-        quote: {
-          initial: "polling",
-          states: {
-            polling: {
-              always: [
-                {
-                  guard: "hasEnoughInfoForQuote",
-                  target: "fetching",
-                },
-              ],
-            },
-            fetching: {
-              invoke: {
-                src: "fetchQuotes",
-                input: ({ context }): QuoteParams => ({
-                  ...context.intent,
-                }),
-                onDone: {
-                  target: "quoted",
-                  actions: "fetchingQuotes",
-                },
-                onError: {
-                  target: "none",
-                  actions: "failIntent",
-                },
-              },
-            },
-            quoted: {
-              after: {
-                5000: "polling",
-              },
-            },
-            none: {
-              after: {
-                500: "polling",
-              },
-            },
-          },
-          on: {
-            FETCH_QUOTE: "quote",
-          },
-        },
-        input: {
+        waitingForInput: {
           on: {
             SET_INTENT: {
-              target: "#swapMachine.Idle.quote",
-              guard: "hasValidQuoteParams",
-              actions: [
-                {
-                  type: "updateIntent",
-                  params: ({ event }) => ({
-                    intent: { ...event.intent },
-                  }),
-                },
-              ],
-            },
-            SUBMIT_SWAP: {
-              target: "#swapMachine.Submitting",
-              guard: "hasValidSubmitSwapParams",
-              actions: [
-                {
-                  type: "updateIntent",
-                  params: ({ event }) => ({
-                    intent: { ...event.intent },
-                  }),
-                },
-              ],
+              target: "#swapMachine.Quoting",
+              guard: "hasEnoughInfoForQuote",
             },
           },
         },
       },
     },
-    Submitting: {
+    Quoting: {
+      initial: "quoting",
+      states: {
+        quoting: {
+          invoke: {
+            src: "fetchQuotes",
+            input: ({ context }): QuoteParams => ({
+              ...context.intent,
+            }),
+            onDone: {
+              target: "quoted",
+              actions: ["progressIntent"],
+            },
+            onError: {
+              target: "#swapMachine.Failed",
+              actions: ["failIntent"],
+            },
+          },
+        },
+        quoted: {
+          after: {
+            5000: "quoting",
+          },
+        },
+      },
+    },
+    Swapping: {
       invoke: {
         src: "submitingSwap",
         input: ({ context }) => ({
           intent: context.intent,
         }),
         onDone: {
-          target: "WaitingForSignature",
-          actions: [
-            "updateCallData", // Use the new action
-            sendTo(
-              ({ self }) => self,
-              (context, event) => ({
-                type: "SUBMIT_SWAP_SUCCESS",
-                data: { callData: event?.output?.callData || null },
-              }),
-            ),
-          ],
-        },
-        onError: {
-          target: "Failed",
-          actions: ["failIntent"],
-        },
-      },
-    },
-    WaitingForSignature: {
-      on: {
-        SIGN_AND_SUBMIT: {
-          target: "Confirming",
-          actions: assign({
-            intent: (context, event) => ({
-              ...context.intent,
-              transactionHash: event.transactionHash,
-            }),
-          }),
-        },
-      },
-    },
-    Confirming: {
-      entry: ["progressIntent", "log"],
-      invoke: {
-        src: "confirmSwap",
-        input: ({ context }) => ({
-          intentId: context.current,
-        }),
-        onDone: {
-          target: "Confirming",
+          target: "Confirmed",
           actions: ["progressIntent"],
         },
         onError: {
@@ -299,7 +219,7 @@ export const swapMachine = setup({
     },
     Failed: {
       on: {
-        RETRY_INTENT: "Submitting",
+        RETRY_INTENT: "Quoting",
       },
     },
   },
