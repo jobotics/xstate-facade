@@ -245,6 +245,10 @@ export class IntentProcessorService {
     return null;
   }
 
+  async fetchIntent(intentId: string): Promise<Context | null> {
+    return null;
+  }
+
   next(state: SwapProgressEnum): SwapProgressEnum {
     switch (state) {
       case SwapProgressEnum.Loading:
