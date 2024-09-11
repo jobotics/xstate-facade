@@ -14,6 +14,7 @@ dist/
 # Tests
 coverage/
 .jest/
+test-results/
 
 # TS
 *.tsbuildinfo

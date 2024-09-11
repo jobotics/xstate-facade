@@ -1,4 +1,4 @@
-import { assign, setup, fromPromise, sendTo } from "xstate";
+import { assign, setup, fromPromise, sendTo, createActor } from "xstate";
 import {
   Context,
   Events,
@@ -13,6 +13,7 @@ import {
   Intent,
   SwapProgressEnum,
 } from "./interfaces/swap-machine.in.interfaces";
+import { createBrowserInspector } from "@statelyai/inspect";
 
 const intentProcessorService = new IntentProcessorService(new ApiService());
 
@@ -87,9 +88,6 @@ export const swapMachine = setup({
         .then((callData) => ({
           callData,
         })),
-    ),
-    confirmSwap: fromPromise(({ input }: { input: Pick<Intent, "intentId"> }) =>
-      waitForExecution(input.intentId),
     ),
     recoverIntent: fromPromise(
       ({ input }: { input: Pick<Intent, "intentId"> }) =>
@@ -307,9 +305,11 @@ export const swapMachine = setup({
   },
 });
 
-type ActionResult = { intentId: string; result: boolean };
-
-async function waitForExecution(intentId: string): Promise<ActionResult> {
-  await sleep(1000);
-  return Promise.resolve({ intentId, result: true });
+const isInspectEnabled = process.env.VITE_INSPECT === "true";
+if (isInspectEnabled) {
+  const { inspect } = createBrowserInspector();
+  const actor = createActor(swapMachine, {
+    inspect,
+  });
+  actor.start();
 }

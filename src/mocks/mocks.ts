@@ -2,12 +2,12 @@ import {
   Context,
   Input,
   QuoteParams,
-} from "src/interfaces/swap-machine.ex.interfaces";
+} from "../interfaces/swap-machine.ex.interfaces";
 import {
   Intent,
   SwapProgressEnum,
   SwapStatusEnum,
-} from "src/interfaces/swap-machine.in.interfaces";
+} from "../interfaces/swap-machine.in.interfaces";
 
 export const mockQuote: QuoteParams = {
   assetIn: "near:mainnet:usdt.tether-token.near",

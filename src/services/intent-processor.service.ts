@@ -15,15 +15,15 @@ import {
   Context,
   Input,
   QuoteParams,
-} from "src/interfaces/swap-machine.ex.interfaces";
+} from "../interfaces/swap-machine.ex.interfaces";
 import { ApiService } from "./api.service";
-import parseDefuseAsset, { generateIntentId } from "src/utils/utils";
+import parseDefuseAsset, { generateIntentId } from "../utils/utils";
 import Ajv from "ajv";
 import {
   msgSchemaCreateIntentCrossChain,
   msgSchemaCreateIntentSingleChain,
-} from "src/schema/schema";
-import { MAX_GAS_TRANSACTION, PROTOCOL_ID } from "src/constants/constants";
+} from "../schema/schema";
+import { MAX_GAS_TRANSACTION, PROTOCOL_ID } from "../constants/constants";
 
 export class IntentProcessorService {
   constructor(private readonly apiService: ApiService) {}

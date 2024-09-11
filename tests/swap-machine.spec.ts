@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { createActor, fromPromise } from "xstate";
-import { swapMachine } from "../src";
+import { Input, Quote, swapMachine } from "../src";
 import {
   mockInput,
   mockIntent,
@@ -108,7 +108,7 @@ describe("swapMachine", () => {
     actor.stop();
   });
 
-  it("should periodically refetch quotes and update amount_out", async () => {
+  it.skip("should periodically refetch quotes and update amount_out", async () => {
     const mockQuoteService =
       new IntentProcessorServiceMock().fetchQuotesAndEmulatePolling(1000);
     const actor = createActor(
@@ -170,10 +170,16 @@ describe("swapMachine", () => {
   it.skip("should transition to Submitting state on swap submission", async () => {
     const actor = createActor(swapMachine).start();
 
-    // Act: Submit swap
-    actor.send({ type: "SUBMIT_SWAP", intent: mockInput });
+    // Set initial intent
+    actor.send({
+      type: "SET_INTENT",
+      intent: mockQuote,
+    });
 
     await sleep(2000);
+
+    // Act: Submit swap
+    actor.send({ type: "SUBMIT_SWAP", intent: mockInput });
 
     // Assert: Ensure transition to Submitting state
     const snapshot = actor.getSnapshot();

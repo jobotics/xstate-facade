@@ -6,8 +6,8 @@ import {
   NearHttpResponse,
   SolverQuote,
 } from "../interfaces/swap-machine.in.interfaces";
-import { QuoteParams } from "src/interfaces/swap-machine.ex.interfaces";
-import { NEAR_RPC, PROTOCOL_ID, SOLVER_RELAY } from "src/constants/constants";
+import { QuoteParams } from "../interfaces/swap-machine.ex.interfaces";
+import { NEAR_RPC, PROTOCOL_ID, SOLVER_RELAY } from "../constants/constants";
 
 export class ApiService {
   private httpService: HttpService;
