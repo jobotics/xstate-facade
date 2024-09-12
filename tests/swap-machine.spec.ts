@@ -1,13 +1,13 @@
 import { describe, it, expect, vi } from "vitest";
 import { createActor, fromPromise } from "xstate";
 import { swapMachine } from "../src";
-import { mockInput, mockIntentId, mockQuote } from "../src/mocks/mocks";
-import { SwapProgressEnum } from "../src/interfaces/swap-machine.in.interfaces";
+import { mockInput, mockIntentId, mockQuote } from "../src/mocks/entity.mock";
+import { SwapProgressEnum } from "../src/interfaces/swap-machine.in.interface";
 import { IntentProcessorServiceMock } from "../src/mocks/intent-processor.service.mock";
 import { sleep } from "../src/utils/utils";
 
 describe("swapMachine", () => {
-  it.skip("should initialize with Loading state", () => {
+  it("should initialize with Loading state", () => {
     const actor = createActor(swapMachine).start();
     expect(actor.getSnapshot().value).toHaveProperty("Loading");
     actor.stop();

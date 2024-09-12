@@ -1,6 +1,6 @@
 import SHA256 from "crypto-js/sha256";
 import Hex from "crypto-js/enc-hex";
-import { ParseDefuseAssetResult } from "../interfaces/swap-machine.in.interfaces";
+import { ParseDefuseAssetResult } from "../interfaces/swap-machine.in.interface";
 import { v4 as uuidv4 } from "uuid";
 
 export async function sleep(timeout: number) {

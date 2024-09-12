@@ -2,9 +2,9 @@ import parseDefuseAsset from "../utils/utils";
 import {
   AssetTypeEnum,
   MapsNetworkEnum,
-} from "../interfaces/swap-machine.in.interfaces";
+} from "../interfaces/swap-machine.in.interface";
 import { IntentProcessorService } from "../services/intent-processor.service";
-import { Input } from "../interfaces/swap-machine.ex.interfaces";
+import { Input } from "../interfaces/swap-machine.ex.interface";
 
 /**
  * Function prepares a transaction call data depends on inputs for different intents.

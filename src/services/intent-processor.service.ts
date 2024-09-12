@@ -9,20 +9,23 @@ import {
   SwapProgressEnum,
   SwapStatusEnum,
   TransactionMethodEnum,
-} from "../interfaces/swap-machine.in.interfaces";
-import { mapAssetKey, mapCreateIntentTransactionCall } from "../maps/maps";
+} from "../interfaces/swap-machine.in.interface";
+import {
+  mapAssetKey,
+  mapCreateIntentTransactionCall,
+} from "../maps/swap-transition.map";
 import {
   Context,
   Input,
   QuoteParams,
-} from "../interfaces/swap-machine.ex.interfaces";
+} from "../interfaces/swap-machine.ex.interface";
 import { ApiService } from "./api.service";
 import parseDefuseAsset, { generateIntentId } from "../utils/utils";
 import Ajv from "ajv";
 import {
   msgSchemaCreateIntentCrossChain,
   msgSchemaCreateIntentSingleChain,
-} from "../schema/schema";
+} from "../schemes/json-validaton.schema";
 import { MAX_GAS_TRANSACTION, PROTOCOL_ID } from "../constants/constants";
 
 export class IntentProcessorService {
@@ -196,6 +199,33 @@ export class IntentProcessorService {
   }
 
   async initialize(intentId: string): Promise<Context | null> {
+    const intent = await this.fetchIntent(intentId);
+    if (!intent) {
+      return null;
+    }
+    return {
+      intent,
+      state: this.initializeProgressStatusAdapter(
+        intent.status as SwapStatusEnum,
+      ),
+      quotes: [],
+    };
+  }
+
+  async fetchQuotes(params: QuoteParams): Promise<SolverQuote[]> {
+    const quotes = await this.apiService.getQuotes(params);
+    return quotes;
+  }
+
+  async prepareSwapCallData(intent: Input): Promise<SubmitIntentResult> {
+    const callData = mapCreateIntentTransactionCall(intent);
+    if (callData) {
+      return callData;
+    }
+    return null;
+  }
+
+  async fetchIntent(intentId: string): Promise<Context["intent"] | null> {
     const intentDetails = await this.apiService.getIntent(intentId);
     const assetIn =
       intentDetails?.asset_in?.asset ??
@@ -216,57 +246,15 @@ export class IntentProcessorService {
     }
 
     return {
-      intent: {
-        intentId,
-        initiator: intentDetails.asset_in.account,
-        assetIn,
-        assetOut,
-        amountIn: intentDetails.asset_in.amount,
-        amountOut: intentDetails.asset_out.amount,
-        expiration: intentDetails.expiration.block_number,
-        lockup: intentDetails.lockup_until.block_number,
-        status: intentDetails.status,
-      },
-      state: this.initializeProgressStatusAdapter(intentDetails.status),
-      quotes: [],
+      intentId,
+      initiator: intentDetails.asset_in.account,
+      assetIn,
+      assetOut,
+      amountIn: intentDetails.asset_in.amount,
+      amountOut: intentDetails.asset_out.amount,
+      expiration: intentDetails.expiration.block_number,
+      lockup: intentDetails.lockup_until.block_number,
+      status: intentDetails.status,
     };
-  }
-
-  async fetchQuotes(params: QuoteParams): Promise<SolverQuote[]> {
-    const quotes = await this.apiService.getQuotes(params);
-    return quotes;
-  }
-
-  async prepareSwapCallData(intent: Input): Promise<SubmitIntentResult> {
-    const callData = mapCreateIntentTransactionCall(intent);
-    if (callData) {
-      return callData;
-    }
-    return null;
-  }
-
-  async fetchIntent(intentId: string): Promise<Context | null> {
-    return null;
-  }
-
-  next(state: SwapProgressEnum): SwapProgressEnum {
-    switch (state) {
-      case SwapProgressEnum.Loading:
-        return SwapProgressEnum.Quoting;
-      case SwapProgressEnum.Quoting:
-        return SwapProgressEnum.Quoted;
-      case SwapProgressEnum.Quoted:
-        return SwapProgressEnum.Submitting;
-      case SwapProgressEnum.Submitting:
-        return SwapProgressEnum.Swapping;
-      case SwapProgressEnum.Swapping:
-        return SwapProgressEnum.Swapped;
-      case SwapProgressEnum.Swapped:
-        return SwapProgressEnum.Confirmed;
-      case SwapProgressEnum.Failed:
-        return SwapProgressEnum.Submitting;
-      default:
-        return SwapProgressEnum.Loading;
-    }
   }
 }
