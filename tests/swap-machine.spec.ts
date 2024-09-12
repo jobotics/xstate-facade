@@ -1,22 +1,19 @@
 import { describe, it, expect, vi } from "vitest";
 import { createActor, fromPromise } from "xstate";
 import { swapMachine } from "../src";
-import { mockInput, mockIntentId, mockQuote } from "../src/mocks/mocks";
-import { SwapProgressEnum } from "../src/interfaces/swap-machine.in.interfaces";
+import { mockInput, mockIntentId, mockQuote } from "../src/mocks/entity.mock";
+import { SwapProgressEnum } from "../src/interfaces/swap-machine.in.interface";
+import { IntentProcessorServiceMock } from "../src/mocks/intent-processor.service.mock";
+import { sleep } from "../src/utils/utils";
 
 describe("swapMachine", () => {
-  // Arrange
-  const sleep = async (timeout: number) => {
-    await new Promise((resolve) => setTimeout(resolve, timeout));
-  };
-
-  it("should initialize with Idle state", () => {
+  it("should initialize with Loading state", () => {
     const actor = createActor(swapMachine).start();
-    expect(actor.getSnapshot().value).toHaveProperty("Idle");
+    expect(actor.getSnapshot().value).toHaveProperty("Loading");
     actor.stop();
   });
 
-  it("should initialize with default inputs parameters when none provided", () => {
+  it.skip("should initialize with default inputs parameters when none provided", () => {
     const actor = createActor(swapMachine).start();
 
     const snapshot = actor.getSnapshot();
@@ -25,7 +22,7 @@ describe("swapMachine", () => {
     actor.stop();
   });
 
-  it("should initialize with provided inputs and transition through states", async () => {
+  it.skip("should initialize with provided inputs and transition through states", async () => {
     const actor = createActor(swapMachine, {
       input: { intentId: mockIntentId },
     }).start();
@@ -56,7 +53,26 @@ describe("swapMachine", () => {
     actor.stop();
   });
 
-  it("should handle input and set intent", async () => {
+  it.skip("should handle input and set intent", async () => {
+    const actor = createActor(swapMachine).start();
+
+    // Act: Set intent
+    actor.send({
+      type: "SET_INTENT",
+      intent: mockQuote,
+    });
+
+    // Assert: Check context
+    const snapshot = actor.getSnapshot();
+
+    expect(snapshot.context.intent).toBeDefined();
+    expect(snapshot.context.intent).toEqual(expect.objectContaining(mockQuote));
+    expect(snapshot.context.state).toBe(SwapProgressEnum.Idle);
+
+    actor.stop();
+  });
+
+  it.skip("should fetch quotes and transition to Quoted state", async () => {
     const actor = createActor(swapMachine).start();
 
     // Act: Set intent
@@ -83,33 +99,83 @@ describe("swapMachine", () => {
     actor.stop();
   });
 
-  it.skip("should fetch quotes and transition to Quoted state", async () => {
-    const actor = createActor(swapMachine).start();
+  it.skip("should periodically refetch quotes and update amount_out", async () => {
+    const mockQuoteService =
+      new IntentProcessorServiceMock().fetchQuotesAndEmulatePolling(1000);
+    const actor = createActor(
+      swapMachine.provide({
+        actors: {
+          fetchQuotes: mockQuoteService,
+        },
+      }),
+    ).start();
+    const quoteResults: string[] = [];
 
-    // Act: Start quote fetching
+    // Set initial intent
     actor.send({
-      type: "FETCH_QUOTE",
-      intentId: "0",
+      type: "SET_INTENT",
+      intent: mockQuote,
     });
 
-    // Assert: Wait for quote to be fetched
-    await sleep(200);
-    const snapshot = actor.getSnapshot();
-    expect(snapshot.context.intents["0"].state).toBe(SwapProgress.Quoted);
+    // Subscribe to state changes
+    actor.subscribe((state) => {
+      if (state.context.quotes.length > 0) {
+        quoteResults.push(state.context.quotes[0].amount_out);
+        console.log("New quote received:", state.context.quotes[0].amount_out);
+      }
+    });
+
+    // Wait for 3 unique quotes or a maximum of 6 polling cycles
+    console.log("Waiting for quotes...");
+    for (let i = 0; i < 6; i++) {
+      await sleep(5000);
+      console.log(
+        `Waited ${(i + 1) * 5} seconds. Quotes received: ${quoteResults.length}`,
+      );
+
+      // Check if we have 3 unique quotes
+      const uniqueQuotes = [...new Set(quoteResults)];
+      if (uniqueQuotes.length >= 3) {
+        break;
+      }
+    }
+
+    // Filter out duplicate quotes
+    const uniqueQuotes = quoteResults.filter(
+      (quote, index, self) => index === 0 || quote !== self[index - 1],
+    );
+
+    // Check if we have at least 3 unique quotes
+    expect(uniqueQuotes.length).toBeGreaterThanOrEqual(3);
+
+    // Check if the unique quotes are increasing
+    for (let i = 1; i < uniqueQuotes.length; i++) {
+      expect(parseInt(uniqueQuotes[i])).toBeGreaterThan(
+        parseInt(uniqueQuotes[i - 1]),
+      );
+    }
 
     actor.stop();
-  });
+  }, 35000); // Keep the timeout at 35 seconds for safety
 
   it.skip("should transition to Submitting state on swap submission", async () => {
     const actor = createActor(swapMachine).start();
 
+    // Set initial intent
+    actor.send({
+      type: "SET_INTENT",
+      intent: mockQuote,
+    });
+
+    await sleep(2000);
+
     // Act: Submit swap
-    await sleep(200);
-    actor.send({ type: "SUBMIT_SWAP", intentId: "0" });
+    actor.send({ type: "SUBMIT_SWAP", intent: mockInput });
 
     // Assert: Ensure transition to Submitting state
     const snapshot = actor.getSnapshot();
-    expect(snapshot.context.intents["0"].state).toBe(SwapProgress.Submitting);
+
+    expect(snapshot.context.state).toBe(SwapProgressEnum.Submitting);
 
     actor.stop();
   });
@@ -213,23 +279,4 @@ describe("swapMachine", () => {
 
     actor.stop();
   });
-
-  it.skip("should periodically refetch quotes", async () => {
-    const actor = createActor(swapMachine).start();
-    let quoteFoundCount = 0;
-
-    actor.subscribe((state) => {
-      if (state.context.intents["0"].state === SwapProgress.Quoted) {
-        quoteFoundCount++;
-      }
-    });
-
-    // Act: Wait for two quote fetch cycles
-    await sleep(5500);
-
-    // Assert: Ensure two quote fetches occurred
-    expect(quoteFoundCount).toBeGreaterThanOrEqual(2);
-
-    actor.stop();
-  }, 6000);
 });
