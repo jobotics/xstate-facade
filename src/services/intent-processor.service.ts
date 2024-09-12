@@ -9,21 +9,24 @@ import {
   SwapProgressEnum,
   SwapStatusEnum,
   TransactionMethodEnum,
-} from "../interfaces/swap-machine.in.interfaces";
-import { mapAssetKey, mapCreateIntentTransactionCall } from "../maps/maps";
+} from "../interfaces/swap-machine.in.interface";
+import {
+  mapAssetKey,
+  mapCreateIntentTransactionCall,
+} from "../maps/swap-transition.map";
 import {
   Context,
   Input,
   QuoteParams,
-} from "src/interfaces/swap-machine.ex.interfaces";
+} from "../interfaces/swap-machine.ex.interface";
 import { ApiService } from "./api.service";
-import parseDefuseAsset, { generateIntentId } from "src/utils/utils";
+import parseDefuseAsset, { generateIntentId } from "../utils/utils";
 import Ajv from "ajv";
 import {
   msgSchemaCreateIntentCrossChain,
   msgSchemaCreateIntentSingleChain,
-} from "src/schema/schema";
-import { MAX_GAS_TRANSACTION, PROTOCOL_ID } from "src/constants/constants";
+} from "../schemes/json-validaton.schema";
+import { MAX_GAS_TRANSACTION, PROTOCOL_ID } from "../constants/constants";
 
 export class IntentProcessorService {
   constructor(private readonly apiService: ApiService) {}
@@ -33,13 +36,13 @@ export class IntentProcessorService {
   ): SwapProgressEnum {
     switch (status) {
       case SwapStatusEnum.Available:
-        return SwapProgressEnum.Confirming;
+        return SwapProgressEnum.Swapping;
       case SwapStatusEnum.Executed:
         return SwapProgressEnum.Confirming;
       case SwapStatusEnum.RolledBack:
         return SwapProgressEnum.Failing;
       default:
-        return SwapProgressEnum.Idle;
+        return SwapProgressEnum.Failing;
     }
   }
 
@@ -196,6 +199,33 @@ export class IntentProcessorService {
   }
 
   async initialize(intentId: string): Promise<Context | null> {
+    const intent = await this.fetchIntent(intentId);
+    if (!intent) {
+      return null;
+    }
+    return {
+      intent,
+      state: this.initializeProgressStatusAdapter(
+        intent.status as SwapStatusEnum,
+      ),
+      quotes: [],
+    };
+  }
+
+  async fetchQuotes(params: QuoteParams): Promise<SolverQuote[]> {
+    const quotes = await this.apiService.getQuotes(params);
+    return quotes;
+  }
+
+  async prepareSwapCallData(intent: Input): Promise<SubmitIntentResult> {
+    const callData = mapCreateIntentTransactionCall(intent);
+    if (callData) {
+      return callData;
+    }
+    return null;
+  }
+
+  async fetchIntent(intentId: string): Promise<Context["intent"] | null> {
     const intentDetails = await this.apiService.getIntent(intentId);
     const assetIn =
       intentDetails?.asset_in?.asset ??
@@ -216,53 +246,15 @@ export class IntentProcessorService {
     }
 
     return {
-      intent: {
-        intentId,
-        initiator: intentDetails.asset_in.account,
-        assetIn,
-        assetOut,
-        amountIn: intentDetails.asset_in.amount,
-        amountOut: intentDetails.asset_out.amount,
-        expiration: intentDetails.expiration.block_number,
-        lockup: intentDetails.lockup_until.block_number,
-        status: intentDetails.status,
-      },
-      state: this.initializeProgressStatusAdapter(intentDetails.status),
-      quotes: [],
+      intentId,
+      initiator: intentDetails.asset_in.account,
+      assetIn,
+      assetOut,
+      amountIn: intentDetails.asset_in.amount,
+      amountOut: intentDetails.asset_out.amount,
+      expiration: intentDetails.expiration.block_number,
+      lockup: intentDetails.lockup_until.block_number,
+      status: intentDetails.status,
     };
-  }
-
-  async fetchQuotes(params: QuoteParams): Promise<SolverQuote[]> {
-    const quotes = await this.apiService.getQuotes(params);
-    return quotes;
-  }
-
-  async prepareSwapCallData(intent: Input): Promise<SubmitIntentResult> {
-    const callData = mapCreateIntentTransactionCall(intent);
-    if (callData) {
-      return callData;
-    }
-    return null;
-  }
-
-  next(state: SwapProgressEnum): SwapProgressEnum {
-    switch (state) {
-      case SwapProgressEnum.Idle:
-        return SwapProgressEnum.Quoting;
-      case SwapProgressEnum.Quoting:
-        return SwapProgressEnum.Quoted;
-      case SwapProgressEnum.Quoted:
-        return SwapProgressEnum.Submitting;
-      case SwapProgressEnum.Submitting:
-        return SwapProgressEnum.Submitted;
-      case SwapProgressEnum.Submitted:
-        return SwapProgressEnum.Confirming;
-      case SwapProgressEnum.Confirming:
-        return SwapProgressEnum.Confirmed;
-      case SwapProgressEnum.Failing:
-        return SwapProgressEnum.Failed;
-      default:
-        return SwapProgressEnum.Idle;
-    }
   }
 }

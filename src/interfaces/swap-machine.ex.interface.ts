@@ -1,4 +1,4 @@
-import { Intent, SwapProgressEnum } from "./swap-machine.in.interfaces";
+import { Intent, SwapProgressEnum } from "./swap-machine.in.interface";
 
 // TODO : refactor this description
 /**
