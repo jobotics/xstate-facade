@@ -1,18 +1,18 @@
-import { assign, fromPromise, emit, createActor } from "xstate";
-import { QuoteParams } from "./interfaces/swap-machine.ex.interface";
-import { IntentProcessorService } from "./services/intent-processor.service";
-import { ApiService } from "./services/api.service";
-import {
-  Intent,
-  SwapProgressEnum,
-} from "./interfaces/swap-machine.in.interface";
+import { createActor } from "xstate";
 import { createBrowserInspector } from "@statelyai/inspect";
 import { SwapMachineFactory } from "./factories/swap-machine.factory";
 import setup from "./setups/base.setup";
 import swapMachineDefinition from "./definitions/base.definition";
+import { MachineConfig } from "xstate";
+
+// Assuming SwapContext and SwapEvent are your actual types
+type SwapContext = any; // Replace with your actual context type
+type SwapEvent = any; // Replace with your actual event type
 
 const factory = new SwapMachineFactory(setup);
-const swapMachine = factory.createMachine(swapMachineDefinition);
+const swapMachine = factory.createMachine(
+  swapMachineDefinition as MachineConfig<SwapContext, any, SwapEvent>,
+);
 
 const isInspectEnabled = process.env.VITE_INSPECT === "true";
 if (isInspectEnabled) {

@@ -1,28 +1,22 @@
-import { setup, StateMachine, AnyEventObject } from "xstate";
+import { setup, MachineConfig, MachineContext, AnyEventObject } from "xstate";
 
 type MachineSetup<
-  TContext,
+  TContext extends MachineContext,
   TEvents extends AnyEventObject,
   TInput,
-> = ReturnType<
-  typeof setup<{
-    context: TContext;
-    events: TEvents;
-    input: TInput;
-    actions: Record<string, (...args: any[]) => any>;
-    actors: Record<string, (...args: any[]) => Promise<any>>;
-  }>
->;
+> = ReturnType<any>;
 
 export class SwapMachineFactory<
-  TContext,
+  TContext extends MachineContext,
   TEvents extends AnyEventObject,
   TInput,
 > {
-  private setup: MachineSetup<TContext, TEvents, TInput>;
-  constructor(private setup: MachineSetup<TContext, TEvents, TInput>) {}
+  private machineSetup: MachineSetup<TContext, TEvents, TInput>;
+  constructor(setup: MachineSetup<TContext, TEvents, TInput>) {
+    this.machineSetup = setup;
+  }
 
-  createMachine(definition: StateMachine<TContext, TEvents>) {
-    return setup(this.setup).createMachine(definition);
+  createMachine(definition: MachineConfig<TContext, any, any>) {
+    return setup(this.machineSetup).createMachine(definition as any);
   }
 }

@@ -1,10 +1,14 @@
-import { QuoteParams } from "../interfaces/swap-machine.ex.interface";
+import {
+  Context,
+  Input,
+  QuoteParams,
+} from "../interfaces/swap-machine.ex.interface";
 import { SwapProgressEnum } from "../interfaces/swap-machine.in.interface";
 
 export default {
   id: "swapMachine",
   initial: "Loading",
-  context: ({ input }) => ({
+  context: ({ input }: { input: Input }) => ({
     intent: input || {},
     state: SwapProgressEnum.Loading,
     quotes: [],
@@ -29,7 +33,7 @@ export default {
         recovering: {
           invoke: {
             src: "recoverIntent",
-            input: ({ context }) => ({
+            input: ({ context }: { context: Context }) => ({
               intentId: context.intent.intentId,
             }),
             onDone: {
@@ -57,7 +61,7 @@ export default {
         quoting: {
           invoke: {
             src: "fetchQuotes",
-            input: ({ context }): QuoteParams => ({
+            input: ({ context }: { context: Context }) => ({
               ...context.intent,
             }),
             onDone: {
@@ -89,7 +93,7 @@ export default {
         submitting: {
           invoke: {
             src: "submitSwap",
-            input: ({ context }) => ({
+            input: ({ context }: { context: Context }) => ({
               intent: context.intent,
             }),
             onDone: {
@@ -114,7 +118,7 @@ export default {
     Swapping: {
       invoke: {
         src: "fetchIntent",
-        input: ({ context }) => ({
+        input: ({ context }: { context: Context }) => ({
           intent: context.intent,
         }),
         onDone: {

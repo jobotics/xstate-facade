@@ -40,9 +40,9 @@ export class IntentProcessorService {
       case SwapStatusEnum.Executed:
         return SwapProgressEnum.Confirming;
       case SwapStatusEnum.RolledBack:
-        return SwapProgressEnum.Failing;
+        return SwapProgressEnum.Failed;
       default:
-        return SwapProgressEnum.Failing;
+        return SwapProgressEnum.Failed;
     }
   }
 

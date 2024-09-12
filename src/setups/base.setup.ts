@@ -31,39 +31,53 @@ export default {
       data: context.output,
     })),
     // Error actions
-
     // Context actions
     updateIntent: assign({
-      intent: (_, params: { intent: Partial<Intent> }) => ({
-        ..._.intent,
+      intent: (
+        context: { intent: Intent },
+        params: { intent: Partial<Intent> },
+      ) => ({
+        ...context.intent,
         ...params.intent,
       }),
     }),
     progressIntent: assign({
-      intent: (context, event) => ({
+      intent: (
+        context: { intent: Intent },
+        event: { output: { state: SwapProgressEnum } },
+      ) => ({
         ...context.intent,
         state: SwapProgressEnum.Confirming,
       }),
     }),
     failIntent: assign({
-      intent: (context) => ({
+      intent: (context: { intent: Intent }) => ({
         ...context.intent,
         state: SwapProgressEnum.Failed,
       }),
     }),
     recoveringIntent: assign({
-      intent: (context, event) => {
+      intent: (
+        context: { intent: Intent; event: { output: { intent: Intent } } },
+        event: { output: { intent: Intent } },
+      ) => {
         if (context.event?.output) {
           return context.event.output.intent;
         }
         return context.intent; // Fallback to current intent if no output
       },
-      state: (context) => {
-        return context.event?.output?.state || context.state;
+      state: (context: {
+        intent: Intent;
+        event: { output: { state: SwapProgressEnum } };
+      }) => {
+        return context.event?.output?.state;
       },
     }),
     updateCallData: assign({
-      intent: (context, event) => ({
+      intent: (
+        context: { intent: Intent },
+        event: { output: { callData: string } },
+      ) => ({
         ...context.intent,
         callData: event?.output?.callData || null, // Use optional chaining and provide a fallback
       }),
@@ -91,12 +105,17 @@ export default {
     ),
   },
   guards: {
-    hasValidForRecovering: ({ context }) => !!context.intent.intentId,
-    hasValidForQuoting: ({ context }) => {
+    hasValidForRecovering: ({ context }: { context: { intent: Intent } }) =>
+      !!context.intent.intentId,
+    hasValidForQuoting: ({ context }: { context: { intent: Intent } }) => {
       const intent = context.intent;
       return !!(intent?.assetIn && intent?.assetOut && intent?.amountIn);
     },
-    hasValidForSubmitting: ({ event }) => {
+    hasValidForSubmitting: ({
+      event,
+    }: {
+      event: { intent: Intent & { accountId: string } };
+    }) => {
       const intent = event.intent;
       return !!(
         intent?.assetIn &&
@@ -106,7 +125,7 @@ export default {
         intent?.accountId
       );
     },
-    hasValidForSwapping: ({ event }) => {
+    hasValidForSwapping: ({ event }: { event: { hash: string } }) => {
       const hash = event.hash;
       return !!hash;
     },
