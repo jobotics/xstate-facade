@@ -17,7 +17,7 @@ import { Intent, SwapProgressEnum } from "./swap-machine.in.interface";
  */
 
 export type Context = {
-  intent: Intent;
+  intent: Partial<Intent>;
   state: SwapProgressEnum;
   quotes: Quote[];
 };
@@ -33,7 +33,7 @@ export type Events =
   | { type: "CONFIRM_SWAP_SUCCESS" }
   | { type: "CONFIRM_SWAP_ERROR" }
   | { type: "QUOTE_EXPIRED" }
-  | { type: "RETRY_INTENT"; intent: Intent }
+  | { type: "ROLLBACK_INTENT" }
   | { type: "SET_INTENT"; intent: Partial<Intent> };
 
 export type Input = {
@@ -42,6 +42,7 @@ export type Input = {
   amountIn: string;
   amountOut: string;
   accountId: string;
+  intentId?: string;
   referral?: string;
   // Next entities aim for cross-swap
   solverId?: string;
@@ -50,6 +51,7 @@ export type Input = {
   // Next entities aim for time execution
   expiration?: number;
   lockup?: number;
+  hash?: string;
 };
 export interface QuoteParams {
   assetIn: string;
@@ -60,4 +62,8 @@ export interface QuoteParams {
 export type Quote = {
   solverId: string;
   amountOut: string;
+};
+
+export type TransactionEntity = {
+  hash: string;
 };

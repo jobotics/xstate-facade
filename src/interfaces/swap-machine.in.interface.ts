@@ -61,10 +61,10 @@ export type Intent = {
   assetOut: string;
   amountIn: string;
   amountOut: string;
-  expiration?: number;
-  lockup?: number;
-  status?: SwapStatusEnum;
-  proof?: string;
+  expiration: number;
+  lockup: number;
+  status: SwapStatusEnum;
+  proof: string;
   referral?: string;
 };
 

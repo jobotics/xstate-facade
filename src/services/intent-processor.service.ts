@@ -225,6 +225,16 @@ export class IntentProcessorService {
     return null;
   }
 
+  async readTransaction(hash: string): Promise<Context["intent"] | null> {
+    return null;
+  }
+
+  async callRollbackIntent(
+    intentId: string,
+  ): Promise<Context["intent"] | null> {
+    return null;
+  }
+
   async fetchIntent(intentId: string): Promise<Context["intent"] | null> {
     const intentDetails = await this.apiService.getIntent(intentId);
     const assetIn =
