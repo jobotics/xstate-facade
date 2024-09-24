@@ -1,54 +1,89 @@
 import { describe, it, expect, vi } from "vitest";
 import { createActor, fromPromise } from "xstate";
-import { swapMachine } from "../src";
-import { mockInput, mockIntentId, mockQuote } from "../src/mocks/entity.mock";
+import { QuoteParams, swapMachine } from "../src";
+import { mockInput, mockQuote } from "../src/mocks/entity.mock";
 import { SwapProgressEnum } from "../src/interfaces/swap-machine.in.interface";
 import { IntentProcessorServiceMock } from "../src/mocks/intent-processor.service.mock";
 import { sleep } from "../src/utils/utils";
 
 describe("swapMachine", () => {
-  it("should initialize with Loading state", () => {
-    const actor = createActor(swapMachine).start();
-    expect(actor.getSnapshot().value).toHaveProperty("Loading");
+  it("should initialize with Idle state", () => {
+    const actor = createActor(swapMachine, { input: {} }).start();
+    expect(actor.getSnapshot().value).toEqual({
+      Swapping: "Idle",
+      Quoting: {},
+    });
     actor.stop();
   });
 
-  it.skip("should initialize with default inputs parameters when none provided", () => {
-    const actor = createActor(swapMachine).start();
+  it("should initialize with default inputs parameters when none provided", () => {
+    const actor = createActor(swapMachine, { input: {} }).start();
 
     const snapshot = actor.getSnapshot();
     expect(snapshot.context.intent).toMatchObject({});
+    expect(snapshot.context.quotes).toMatchObject([]);
+    expect(snapshot.context.bestQuote).toMatchObject({});
 
     actor.stop();
   });
 
-  it.skip("should initialize with provided inputs and transition through states", async () => {
+  it("should initialize with provided inputs and update state based on quotes", async () => {
     const actor = createActor(swapMachine, {
-      input: { intentId: mockIntentId },
+      input: mockInput,
     }).start();
 
-    await sleep(2000);
+    await sleep(0);
 
     const snapshot = actor.getSnapshot();
 
-    // Check if the intent is initialized
-    expect(snapshot.context.intent).toBeDefined();
-    expect(snapshot.context.intent.intentId).toBe(mockIntentId);
-
-    // Check if the state is correct
-    expect(snapshot.value).toEqual({
-      Idle: expect.objectContaining({
-        recover: "done",
-        quote: "polling",
-        input: {},
-      }),
+    expect(snapshot.context.intent).toMatchObject({
+      assetIn: mockInput.assetIn,
+      assetOut: mockInput.assetOut,
+      amountIn: mockInput.amountIn,
     });
 
-    // Check if the intent has been recovered
-    expect(snapshot.context.intent.assetIn).toBeDefined();
-    expect(snapshot.context.intent.assetOut).toBeDefined();
-    expect(snapshot.context.intent.amountIn).toBeDefined();
-    expect(snapshot.context.state).toBe(SwapProgressEnum.Confirmed);
+    expect(snapshot.value).toEqual({
+      Swapping: "Idle",
+      Quoting: expect.any(Object),
+    });
+
+    expect(snapshot.context.quotes).toBeInstanceOf(Array);
+
+    actor.stop();
+  });
+
+  it("should fetch quotes and update context with list of quotes", async () => {
+    const intentProcessorServiceMock = new IntentProcessorServiceMock();
+    const actor = createActor(
+      swapMachine.provide({
+        actors: {
+          fetchQuotes: fromPromise(
+            async ({ input }: { input: Partial<QuoteParams> }) => {
+              const quotes =
+                await intentProcessorServiceMock.fetchQuotes(input);
+              return quotes;
+            },
+          ),
+        },
+      }),
+      {
+        input: mockInput,
+      },
+    ).start();
+
+    await sleep(0);
+
+    const snapshot = actor.getSnapshot();
+
+    expect(snapshot.context.intent).toBeDefined();
+    expect(snapshot.context.quotes).toBeInstanceOf(Array);
+
+    if (snapshot.context.quotes.length > 0) {
+      expect(snapshot.context.quotes[0]).toHaveProperty("query_id");
+      expect(snapshot.context.quotes[0]).toHaveProperty("tokens");
+    }
+
+    expect(snapshot.context.bestQuote).toBeDefined();
 
     actor.stop();
   });
@@ -68,33 +103,6 @@ describe("swapMachine", () => {
     expect(snapshot.context.intent).toBeDefined();
     expect(snapshot.context.intent).toEqual(expect.objectContaining(mockQuote));
     expect(snapshot.context.state).toBe(SwapProgressEnum.Idle);
-
-    actor.stop();
-  });
-
-  it.skip("should fetch quotes and transition to Quoted state", async () => {
-    const actor = createActor(swapMachine).start();
-
-    // Act: Set intent
-    actor.send({
-      type: "SET_INTENT",
-      intent: mockQuote,
-    });
-
-    await sleep(2000);
-
-    // Assert: Check context
-    const snapshot = actor.getSnapshot();
-
-    expect(snapshot.context.intent).toBeDefined();
-    expect(snapshot.context.quotes).toBeInstanceOf(Array);
-
-    if (snapshot.context.quotes.length > 0) {
-      expect(snapshot.context.quotes[0]).toHaveProperty("solver_id");
-      expect(snapshot.context.quotes[0]).toHaveProperty("amount_out");
-    }
-
-    expect(snapshot.context.state).toBe(SwapProgressEnum.Quoted);
 
     actor.stop();
   });

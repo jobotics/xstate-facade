@@ -1,4 +1,4 @@
-import { Intent, SwapProgressEnum } from "./swap-machine.in.interface";
+import { Intent, SolverQuote } from "./swap-machine.in.interface";
 
 // TODO : refactor this description
 /**
@@ -16,42 +16,23 @@ import { Intent, SwapProgressEnum } from "./swap-machine.in.interface";
  * - QuoteList - abstract quoted list for UI adaptation.
  */
 
-export type Context = {
+export interface Context {
   intent: Partial<Intent>;
-  state: SwapProgressEnum;
   quotes: Quote[];
+  bestQuote: Quote | null;
+}
+
+export type Events = {
+  type: "APPROVE_QUOTE";
+  data?: { bestQuote: Quote; proof: string; quotes: Quote[] };
+  output?: SolverQuote[];
 };
 
-export type Events =
-  | { type: "FETCH_QUOTE" }
-  | { type: "FETCH_QUOTE_SUCCESS"; data: { quotes: Quote[] } }
-  | { type: "FETCH_QUOTE_ERROR" }
-  | { type: "SUBMIT_SWAP"; intent: Intent }
-  | { type: "SUBMIT_SWAP_SUCCESS"; data: { callData: any } }
-  | { type: "SUBMIT_SWAP_ERROR" }
-  | { type: "CONFIRM_SWAP" }
-  | { type: "CONFIRM_SWAP_SUCCESS" }
-  | { type: "CONFIRM_SWAP_ERROR" }
-  | { type: "QUOTE_EXPIRED" }
-  | { type: "ROLLBACK_INTENT" }
-  | { type: "SET_INTENT"; intent: Partial<Intent> };
-
 export type Input = {
-  assetIn: string;
-  assetOut: string;
-  amountIn: string;
-  amountOut: string;
-  accountId: string;
+  assetIn?: string;
+  assetOut?: string;
+  amountIn?: string;
   intentId?: string;
-  referral?: string;
-  // Next entities aim for cross-swap
-  solverId?: string;
-  accountFrom?: string;
-  accountTo?: string;
-  // Next entities aim for time execution
-  expiration?: number;
-  lockup?: number;
-  hash?: string;
 };
 export interface QuoteParams {
   assetIn: string;
@@ -59,10 +40,7 @@ export interface QuoteParams {
   amountIn: string;
 }
 
-export type Quote = {
-  solverId: string;
-  amountOut: string;
-};
+export type Quote = SolverQuote;
 
 export type TransactionEntity = {
   hash: string;

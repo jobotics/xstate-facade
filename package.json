@@ -1,7 +1,7 @@
 {
-  "name": "xstate-facade",
+  "name": "xstate-swap-machine",
   "version": "1.0.0",
-  "description": "",
+  "description": "XState implementation of a swap machine",
   "main": "src/index.js",
   "scripts": {
     "build": "tsc",

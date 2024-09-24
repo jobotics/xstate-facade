@@ -6,8 +6,6 @@ import {
   PrepareTxSingleChainResult,
   SolverQuote,
   SubmitIntentResult,
-  SwapProgressEnum,
-  SwapStatusEnum,
   TransactionMethodEnum,
 } from "../interfaces/swap-machine.in.interface";
 import {
@@ -31,24 +29,7 @@ import { MAX_GAS_TRANSACTION, PROTOCOL_ID } from "../constants/constants";
 export class IntentProcessorService {
   constructor(private readonly apiService: ApiService) {}
 
-  private initializeProgressStatusAdapter(
-    status: SwapStatusEnum,
-  ): SwapProgressEnum {
-    switch (status) {
-      case SwapStatusEnum.Available:
-        return SwapProgressEnum.Swapping;
-      case SwapStatusEnum.Executed:
-        return SwapProgressEnum.Confirming;
-      case SwapStatusEnum.RolledBack:
-        return SwapProgressEnum.Failed;
-      default:
-        return SwapProgressEnum.Failed;
-    }
-  }
-
-  static prepareTxSingleChain(
-    intent: Input,
-  ): PrepareTxSingleChainResult | null {
+  static prepareTxSingleChain(intent: any): PrepareTxSingleChainResult | null {
     const from = parseDefuseAsset(intent.assetIn);
     const contractIdTokenIn = from!.contractId;
     const to = parseDefuseAsset(intent.assetOut);
@@ -125,7 +106,7 @@ export class IntentProcessorService {
     };
   }
 
-  static prepareTxCrossChain(intent: Input): PrepareTxCrossChainResult | null {
+  static prepareTxCrossChain(intent: any): PrepareTxCrossChainResult | null {
     const from = parseDefuseAsset(intent.assetIn);
     const contractIdTokenIn = from!.contractId;
     const to = parseDefuseAsset(intent.assetOut);
@@ -198,26 +179,18 @@ export class IntentProcessorService {
     };
   }
 
-  async initialize(intentId: string): Promise<Context | null> {
-    const intent = await this.fetchIntent(intentId);
-    if (!intent) {
-      return null;
+  async fetchQuotes(params: Partial<QuoteParams>): Promise<SolverQuote[]> {
+    if (!params.assetIn || !params.assetOut || !params.amountIn) {
+      throw new Error("Invalid quote parameters");
     }
-    return {
-      intent,
-      state: this.initializeProgressStatusAdapter(
-        intent.status as SwapStatusEnum,
-      ),
-      quotes: [],
-    };
-  }
-
-  async fetchQuotes(params: QuoteParams): Promise<SolverQuote[]> {
-    const quotes = await this.apiService.getQuotes(params);
+    const quotes = await this.apiService.getQuotes(params as QuoteParams);
     return quotes;
   }
 
   async prepareSwapCallData(intent: Input): Promise<SubmitIntentResult> {
+    if (!intent.assetIn || !intent.assetOut || !intent.amountIn) {
+      throw new Error("Invalid intent parameters");
+    }
     const callData = mapCreateIntentTransactionCall(intent);
     if (callData) {
       return callData;
@@ -262,9 +235,18 @@ export class IntentProcessorService {
       assetOut,
       amountIn: intentDetails.asset_in.amount,
       amountOut: intentDetails.asset_out.amount,
-      expiration: intentDetails.expiration.block_number,
-      lockup: intentDetails.lockup_until.block_number,
-      status: intentDetails.status,
     };
+  }
+
+  async generateMessage(input: any): Promise<string> {
+    return "";
+  }
+
+  async updateIntentState(input: any): Promise<string> {
+    return "";
+  }
+
+  async sendMessage(input: any): Promise<string> {
+    return "";
   }
 }

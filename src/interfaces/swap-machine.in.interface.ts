@@ -12,23 +12,23 @@ export interface NearHttpResponse<T> extends HttpResponse<{ result: T }> {
   };
 }
 
+export type GuardArgs<TContext, TEvent> = {
+  context: TContext;
+  event: TEvent;
+};
+
 export enum SwapProgressEnum {
-  Loading = "Loading",
-  Quoting = "Quoting",
-  Quoted = "Quoted",
-  Submitting = "Submitting",
-  Submitted = "Submitted",
-  Swapping = "Swapping",
-  Swapped = "Swapped",
-  Confirming = "Confirming",
-  Confirmed = "Confirmed",
-  Failed = "Failed",
+  Idle = "Idle",
+  Signing = "Signing",
+  Settling = "Settling",
+  Broadcasting = "Broadcasting",
+  Finishing = "Finishing",
+  ErrorHandling = "ErrorHandling",
 }
 
 export enum SwapStatusEnum {
   Available = "available",
   Executed = "executed",
-  RolledBack = "rolled_back",
 }
 
 export enum AssetTypeEnum {
@@ -61,11 +61,7 @@ export type Intent = {
   assetOut: string;
   amountIn: string;
   amountOut: string;
-  expiration: number;
-  lockup: number;
-  status: SwapStatusEnum;
   proof: string;
-  referral?: string;
 };
 
 export type AbstractAsset = {
@@ -103,10 +99,12 @@ export type IntentDetails = {
   proof: string;
 };
 
-export interface SolverQuote {
-  solver_id: string;
-  amount_out: string;
-}
+export type SolverQuote = {
+  query_id: number;
+  tokens: {
+    [key: string]: string;
+  };
+};
 
 export type ParseDefuseAssetResult = {
   blockchain: string;
