@@ -74,5 +74,6 @@ export const mockQuotes: Quote[] = [
 export const mockIntentState: Context = {
   intent: mockGetIntent,
   quotes: [],
-  bestQuote: mockQuotes[0],
+  signedMessage: null,
+  bestQuote: null,
 };

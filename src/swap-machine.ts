@@ -1,4 +1,12 @@
-import { createActor, setup, fromPromise, assign, emit } from "xstate";
+import {
+  createActor,
+  setup,
+  fromPromise,
+  assign,
+  emit,
+  AnyEventObject,
+  spawnChild,
+} from "xstate";
 import { createBrowserInspector } from "@statelyai/inspect";
 import {
   Context,
@@ -8,7 +16,10 @@ import {
 } from "./interfaces/swap-machine.ex.interface";
 import { IntentProcessorService } from "./services/intent-processor.service";
 import { ApiService } from "./services/api.service";
-import { SolverQuote } from "./interfaces/swap-machine.in.interface";
+import {
+  SolverQuote,
+  StateActionAny,
+} from "./interfaces/swap-machine.in.interface";
 
 const intentProcessorService = new IntentProcessorService(new ApiService());
 
@@ -17,63 +28,54 @@ export const swapMachine = setup({
     context: {} as Context,
     events: {} as Events,
     input: {} as Input,
-    output: {} as SolverQuote[],
   },
   actions: {
-    updateQoutes: assign({
-      quotes: ({ event }) => event.output || [],
+    prepareSignMessage: assign({
+      signedMessage: ({ context }) =>
+        intentProcessorService.generateMessage(context),
     }),
     saveBestQuote: assign({
-      quotes: ({ event, context }) => [
-        ...context.quotes,
-        event.data!.bestQuote,
-      ],
+      bestQuote: ({ event }) => (event.output as SolverQuote) || null,
     }),
     saveProofOfBroadcasting: assign({
       intent: ({ event, context }) => ({
         ...context.intent,
-        proof: event.data!.proof,
+        proof: (event.data as { proof: string }).proof,
       }),
     }),
-    emitErrorAgreementing: function (_, params) {
-      emit({ type: "errorAgreementing", params });
-    },
-    emitSuccessAgreementing: function (_, params) {
-      emit({ type: "successAgreementing", params });
-    },
-    emitSuccessBroadcasting: function (_, params) {
+    emitSuccessBroadcasting: function ({ context, event }, params) {
       emit({ type: "successBroadcasting", params });
     },
-    emitErrorBroadcasting: function (_, params) {
+    emitErrorBroadcasting: function ({ context, event }, params) {
       emit({ type: "errorBroadcasting", params });
     },
-    emitSuccessSettling: function (_, params) {
-      emit({ type: "successSettling", params });
+    emitSuccessSetteling: function ({ context, event }, params) {
+      emit({ type: "successSetteling", params });
     },
-    emitErrorSettling: function (_, params) {
-      emit({ type: "errorSettling", params });
+    emitErrorSetteling: function ({ context, event }, params) {
+      emit({ type: "errorSetteling", params });
     },
-    emitSuccessQuoting: function (_, params) {
-      emit({ type: "successQuoting", params });
+    emitSuccessSigning: function ({ context, event }, params) {
+      emit({ type: "successSigning", params });
     },
-    emitErrorQuoting: function (_, params) {
-      emit({ type: "errorQuoting", params });
+    emitErrorSigning: function ({ context, event }, params) {
+      emit({ type: "errorSigning", params });
     },
+    updateQuotes: assign({
+      quotes: ({ event }) => (event.data as SolverQuote[]) || [],
+    }),
   },
   actors: {
     signMessage: fromPromise(async ({ input }) => {
-      return intentProcessorService.generateMessage(input).then((data) => data);
+      return intentProcessorService.signMessage(input).then((data) => data);
+    }), // !IMPORTANT signMessage - Must be provided externaly with implementation
+    broadcastMessage: fromPromise(async ({ input }) => {
+      return intentProcessorService.sendMessage(input).then((data) => data);
     }),
     updateIntentState: fromPromise(async ({ input }) => {
       return intentProcessorService
         .updateIntentState(input)
         .then((data) => data);
-    }),
-    sendMessage: fromPromise(async ({ input }) => {
-      return intentProcessorService.sendMessage(input).then((data) => data);
-    }),
-    fetchQuotes: fromPromise(({ input }: { input: Partial<QuoteParams> }) => {
-      return intentProcessorService.fetchQuotes(input).then((data) => data);
     }),
   },
   guards: {
@@ -98,25 +100,32 @@ export const swapMachine = setup({
     },
   },
 }).createMachine({
-  context: ({ input }: { input: Partial<Input> }) => ({
-    intent: {
-      assetIn: input?.assetIn || undefined,
-      assetOut: input?.assetOut || undefined,
-      amountIn: input?.amountIn || undefined,
-      intentId: input?.intentId || undefined,
-    },
-    quotes: [],
-    bestQuote: null,
-  }),
-  id: "intent_presentation",
-  type: "parallel",
+  context: ({ input }: { input: Partial<Input> }) => {
+    return {
+      intent: {
+        intentId: input?.intentId ?? undefined,
+      },
+      quotes: [],
+      bestQuote: null,
+      signedMessage: null,
+    };
+  },
+  id: "swap_machine",
+  initial: "Swapping",
   states: {
     Swapping: {
       initial: "Idle",
       states: {
         Idle: {
           on: {
-            APPROVE_QUOTE: {
+            UPDATE_QUOTES: {
+              actions: {
+                type: "updateQuotes",
+              } as StateActionAny,
+              description:
+                "Subscribes to updates from quote_machine.\n\nEach time the quote_machine emits a quotes\n\nupdate event, this event should be fired to\n\nupdate context.quotes.",
+            },
+            SUBMIT_SWAP: {
               target: "Signing",
               description:
                 "User action event of willing to signMessage quote from solver.",
@@ -130,30 +139,31 @@ export const swapMachine = setup({
             description: "The intention was started earlier and not completed.",
           },
           description:
-            "Handle initializing a new intent or recovering an existing one.\n\nResult \\[Branching\\]:\n\n1. Transition to APPROVE_QUOTE for new intent;\n2. Transition to Settling for old intent;",
+            "Handle initializing a new intent or recovering an existing one.\n\nResult \\[Branching\\]:\n\n1. Transition to Signing for new intent;\n2. Transition to Setteling for old intent;",
         },
         Signing: {
-          // entry: [
-          //   {
-          //     type: "saveBestQuote",
-          //   },
-          // ],
+          entry: [
+            {
+              type: "prepareSignMessage",
+            },
+            {
+              type: "saveBestQuote",
+            },
+          ] as StateActionAny,
           invoke: {
             id: "signMessage",
-            input: {
-              message: "I'm ready to sign my part (left side of agreement)",
-            },
+            input: ({ context }: { context: Context }) => context.signedMessage,
             onDone: {
               target: "Broadcasting",
-              // actions: {
-              //   type: "emitSuccessAgreementing",
-              // },
+              actions: {
+                type: "emitSuccessSigning",
+              } as StateActionAny,
             },
             onError: {
               target: "ErrorHandling",
-              // actions: {
-              //   type: "emitErrorAgreementing",
-              // },
+              actions: {
+                type: "emitErrorSigning",
+              } as StateActionAny,
             },
             src: "signMessage",
           },
@@ -171,29 +181,58 @@ export const swapMachine = setup({
             id: "updateIntentState",
             input: {},
             onDone: {
-              target: "#intent_presentation.Swapping.Finishing.Confirmed",
-              // actions: {
-              //   type: "emitSuccessSettling",
-              // },
+              target: "#swap_machine.Swapping.Finishing.Confirmed",
+              actions: {
+                type: "emitSuccessSetteling",
+              } as StateActionAny,
               guard: {
                 type: "isSettled",
               },
             },
             onError: {
               target: "ErrorHandling",
-              // actions: {
-              //   type: "emitErrorSettling",
-              // },
+              actions: {
+                type: "emitErrorSetteling",
+              } as StateActionAny,
             },
             src: "updateIntentState",
           },
           description:
             "Fetching intent status until settlement. \n\nIf the status is verified then transition to the Finishing, \n\notherwise run cycle again through Fetching.\n\nResult:\n\n- Update \\[context\\] with intent status;",
         },
+        Broadcasting: {
+          invoke: {
+            id: "sendMessage",
+            input: {
+              message:
+                "I received signature from user and ready to sign my part (left+right side of agreement)",
+            },
+            onDone: {
+              target: "Settling",
+              actions: [
+                {
+                  type: "saveProofOfBroadcasting",
+                },
+                {
+                  type: "emitSuccessBroadcasting",
+                },
+              ] as StateActionAny,
+            },
+            onError: {
+              target: "ErrorHandling",
+              actions: {
+                type: "emitErrorBroadcasting",
+              } as StateActionAny,
+            },
+            src: "broadcastMessage",
+          },
+          description:
+            "Send user proof of sign (signature) to solver bus \\[relay responsibility\\].\n\nResult:\n\n- Update \\[context\\] with proof of broadcasting from solver;",
+        },
         ErrorHandling: {
           always: [
             {
-              target: "#intent_presentation.Swapping.Finishing.Failed",
+              target: "#swap_machine.Swapping.Finishing.Failed",
               guard: {
                 type: "isServiceOffline",
               },
@@ -215,35 +254,6 @@ export const swapMachine = setup({
           ],
           description: "A single decision state acts as an error transistor.",
         },
-        Broadcasting: {
-          invoke: {
-            id: "sendMessage",
-            input: {
-              message:
-                "I received signature from user and ready to sign my part (left+right side of agreement)",
-            },
-            onDone: {
-              target: "Settling",
-              // actions: [
-              //   {
-              //     type: "saveProofOfBroadcasting",
-              //   },
-              //   {
-              //     type: "emitSuccessBroadcasting",
-              //   },
-              // ],
-            },
-            onError: {
-              target: "ErrorHandling",
-              // actions: {
-              //   type: "emitErrorBroadcasting",
-              // },
-            },
-            src: "sendMessage",
-          },
-          description:
-            "Send user proof of sign (signature) to solver bus.\n\nResult:\n\n- Update \\[context\\] with proof of broadcasting from solver;",
-        },
         Finishing: {
           type: "parallel",
           description:
@@ -261,36 +271,6 @@ export const swapMachine = setup({
           },
         },
       },
-    },
-    Quoting: {
-      after: {
-        "500": {
-          target: "Quoting",
-        },
-      },
-      invoke: {
-        id: "fetchQuotes",
-        input: ({ context }: { context: Context }) => ({
-          assetIn: context.intent.assetIn,
-          amountIn: context.intent.amountIn,
-          assetOut: context.intent.assetOut,
-        }),
-        onDone: {
-          actions: [
-            assign({
-              quotes: ({ event }) => event.output || [],
-            }),
-          ],
-        },
-        onError: {
-          // actions: {
-          //   type: "emitErrorQuoting",
-          // },
-        },
-        src: "fetchQuotes",
-      },
-      description:
-        "Polling the solver bus and receiving proposals through POST requests. \n\nLater, we plan to switch to two-way communication using WebSockets.\n\nResult:\n\n- Update \\[context\\] with list of quotes;",
     },
   },
 });

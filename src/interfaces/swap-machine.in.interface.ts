@@ -17,6 +17,10 @@ export type GuardArgs<TContext, TEvent> = {
   event: TEvent;
 };
 
+// TODO: Fix any
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type StateActionAny = any;
+
 export enum SwapProgressEnum {
   Idle = "Idle",
   Signing = "Signing",
@@ -104,6 +108,14 @@ export type SolverQuote = {
   tokens: {
     [key: string]: string;
   };
+};
+
+export type SwapMessageParams = {
+  message: string;
+  recipient: string;
+  nonce: Buffer;
+  callbackUrl?: string;
+  state?: string;
 };
 
 export type ParseDefuseAssetResult = {

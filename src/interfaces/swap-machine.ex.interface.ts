@@ -1,4 +1,8 @@
-import { Intent, SolverQuote } from "./swap-machine.in.interface";
+import {
+  Intent,
+  SolverQuote,
+  SwapMessageParams,
+} from "./swap-machine.in.interface";
 
 // TODO : refactor this description
 /**
@@ -20,12 +24,20 @@ export interface Context {
   intent: Partial<Intent>;
   quotes: Quote[];
   bestQuote: Quote | null;
+  signedMessage: SwapMessageParams | null;
 }
 
 export type Events = {
-  type: "APPROVE_QUOTE";
-  data?: { bestQuote: Quote; proof: string; quotes: Quote[] };
-  output?: SolverQuote[];
+  type: "SET_PARAMS" | "SUBMIT_SWAP" | "UPDATE_QUOTES";
+  data?:
+    | {
+        assetIn: string;
+        assetOut: string;
+        amountIn: string;
+      }
+    | { proof: string }
+    | SolverQuote[];
+  output?: SolverQuote | SolverQuote[] | SwapMessageParams;
 };
 
 export type Input = {
