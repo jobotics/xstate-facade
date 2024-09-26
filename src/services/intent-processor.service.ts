@@ -7,6 +7,7 @@ import {
   SolverQuote,
   SubmitIntentResult,
   TransactionMethodEnum,
+  SwapMessageParams,
 } from "../interfaces/swap-machine.in.interface";
 import {
   mapAssetKey,
@@ -25,6 +26,7 @@ import {
   msgSchemaCreateIntentSingleChain,
 } from "../schemes/json-validaton.schema";
 import { MAX_GAS_TRANSACTION, PROTOCOL_ID } from "../constants/constants";
+import { randomBytes } from "crypto";
 
 export class IntentProcessorService {
   constructor(private readonly apiService: ApiService) {}
@@ -238,15 +240,35 @@ export class IntentProcessorService {
     };
   }
 
-  async generateMessage(input: any): Promise<string> {
-    return "";
+  generateMessage(input: any): SwapMessageParams {
+    const challenge = randomBytes(32);
+    const message = "Login with NEAR";
+    const recipient = "swap-defuse.near";
+    return {
+      message,
+      recipient,
+      nonce: challenge,
+    };
+  }
+
+  async signMessage(input: any): Promise<any> {
+    return {
+      signature: "mocked_signature",
+    };
+  }
+
+  async sendMessage(input: any): Promise<any> {
+    const challenge = randomBytes(32);
+    const message = "Login with NEAR";
+    const recipient = "swap-defuse.near";
+    return {
+      message,
+      recipient,
+      nonce: challenge,
+    };
   }
 
   async updateIntentState(input: any): Promise<string> {
-    return "";
-  }
-
-  async sendMessage(input: any): Promise<string> {
     return "";
   }
 }

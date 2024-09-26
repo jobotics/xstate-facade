@@ -1,23 +1,25 @@
 import { describe, it, expect, vi } from "vitest";
 import { createActor, fromPromise } from "xstate";
-import { QuoteParams, swapMachine } from "../src";
-import { mockInput, mockQuote } from "../src/mocks/entity.mock";
-import { SwapProgressEnum } from "../src/interfaces/swap-machine.in.interface";
+import { Events, quoteMachine, QuoteParams, swapMachine } from "../src";
+import { mockInput, mockQuote, mockQuotes } from "../src/mocks/entity.mock";
+import {
+  SolverQuote,
+  SwapProgressEnum,
+} from "../src/interfaces/swap-machine.in.interface";
 import { IntentProcessorServiceMock } from "../src/mocks/intent-processor.service.mock";
 import { sleep } from "../src/utils/utils";
 
 describe("swapMachine", () => {
   it("should initialize with Idle state", () => {
-    const actor = createActor(swapMachine, { input: {} }).start();
+    const actor = createActor(swapMachine).start();
     expect(actor.getSnapshot().value).toEqual({
       Swapping: "Idle",
-      Quoting: {},
     });
     actor.stop();
   });
 
   it("should initialize with default inputs parameters when none provided", () => {
-    const actor = createActor(swapMachine, { input: {} }).start();
+    const actor = createActor(swapMachine).start();
 
     const snapshot = actor.getSnapshot();
     expect(snapshot.context.intent).toMatchObject({});
@@ -27,32 +29,98 @@ describe("swapMachine", () => {
     actor.stop();
   });
 
-  it("should initialize with provided inputs and update state based on quotes", async () => {
-    const actor = createActor(swapMachine, {
-      input: mockInput,
-    }).start();
+  it("should emulate UPDATE_QUOTES from quoteMachine", async () => {
+    const intentProcessorServiceMock = new IntentProcessorServiceMock();
+
+    // Create actors for both quoteMachine and swapMachine
+    const quoteActor = createActor(
+      quoteMachine.provide({
+        actors: {
+          fetchQuotes: fromPromise(
+            async ({ input }: { input: Partial<QuoteParams> }) => {
+              return intentProcessorServiceMock.fetchQuotes(input);
+            },
+          ),
+        },
+      }),
+    ).start();
+
+    const swapActor = createActor(swapMachine).start();
+
+    const subscription = quoteActor.on("QUOTES_UPDATED", (event) => {
+      const quotes = (event as Events).data as SolverQuote[];
+      if (quotes.length > 0) {
+        swapActor.send({
+          type: "UPDATE_QUOTES",
+          data: quotes,
+        });
+      }
+    });
+
+    // Trigger the quote fetching process
+    quoteActor.send({
+      type: "SET_PARAMS",
+      data: {
+        assetIn: mockInput!.assetIn!,
+        assetOut: mockInput!.assetOut!,
+        amountIn: mockInput!.amountIn!,
+      },
+    });
+
+    await sleep(500);
+
+    const snapshot = swapActor.getSnapshot();
+
+    // Assertions to verify the quotes are updated in swapMachine
+    expect(snapshot.context.quotes).toEqual(expect.any(Array));
+    expect(snapshot.context.quotes.length).toBeGreaterThan(0);
+
+    // Cleanup
+    subscription.unsubscribe();
+    quoteActor.stop();
+    swapActor.stop();
+  });
+
+  it.skip("should transition to Signing state and prepare message to sign", async () => {
+    const intentProcessorServiceMock = new IntentProcessorServiceMock();
+    const actor = createActor(swapMachine).start();
 
     await sleep(0);
 
-    const snapshot = actor.getSnapshot();
+    let snapshot = actor.getSnapshot();
 
-    expect(snapshot.context.intent).toMatchObject({
-      assetIn: mockInput.assetIn,
-      assetOut: mockInput.assetOut,
-      amountIn: mockInput.amountIn,
-    });
-
+    expect(snapshot.context.intent).toBeDefined();
+    expect(snapshot.context.intent).toEqual(expect.objectContaining(mockQuote));
     expect(snapshot.value).toEqual({
-      Swapping: "Idle",
+      Swapping: "Signing",
       Quoting: expect.any(Object),
     });
+    expect(snapshot.context.signedMessage).toEqual({
+      message: "Login with NEAR",
+      recipient: "swap-defuse.near",
+      nonce: expect.any(Buffer),
+    });
 
-    expect(snapshot.context.quotes).toBeInstanceOf(Array);
+    const signature = "mocked_signature";
+
+    actor.send({
+      type: "SUBMIT_SWAP",
+      signature,
+    });
+
+    snapshot = actor.getSnapshot();
+
+    expect(snapshot.context.signature).toBe(signature);
+
+    expect(snapshot.value).toEqual({
+      Swapping: "Broadcasting",
+      Quoting: expect.any(Object),
+    });
 
     actor.stop();
   });
 
-  it("should fetch quotes and update context with list of quotes", async () => {
+  it.skip("should approve quote with signature and transition to Broadcasting state", async () => {
     const intentProcessorServiceMock = new IntentProcessorServiceMock();
     const actor = createActor(
       swapMachine.provide({
@@ -64,6 +132,11 @@ describe("swapMachine", () => {
               return quotes;
             },
           ),
+          signMessage: fromPromise(async ({ input }) => {
+            const signedMessage =
+              await intentProcessorServiceMock.prepareSignMessage(input);
+            return { signature: "mocked_signature", message: signedMessage };
+          }),
         },
       }),
       {
@@ -73,98 +146,28 @@ describe("swapMachine", () => {
 
     await sleep(0);
 
-    const snapshot = actor.getSnapshot();
-
-    expect(snapshot.context.intent).toBeDefined();
-    expect(snapshot.context.quotes).toBeInstanceOf(Array);
-
-    if (snapshot.context.quotes.length > 0) {
-      expect(snapshot.context.quotes[0]).toHaveProperty("query_id");
-      expect(snapshot.context.quotes[0]).toHaveProperty("tokens");
-    }
-
-    expect(snapshot.context.bestQuote).toBeDefined();
-
-    actor.stop();
-  });
-
-  it.skip("should handle input and set intent", async () => {
-    const actor = createActor(swapMachine).start();
-
-    // Act: Set intent
     actor.send({
-      type: "SET_INTENT",
-      intent: mockQuote,
+      type: "SUBMIT_SWAP",
     });
 
-    // Assert: Check context
     const snapshot = actor.getSnapshot();
 
     expect(snapshot.context.intent).toBeDefined();
     expect(snapshot.context.intent).toEqual(expect.objectContaining(mockQuote));
-    expect(snapshot.context.state).toBe(SwapProgressEnum.Idle);
+    expect(snapshot.value).toEqual({
+      Swapping: "Signing",
+      Quoting: expect.any(Object),
+    });
+
+    expect(snapshot.context.signedMessage).toBeDefined();
+    expect(snapshot.context.signedMessage).toEqual({
+      message: "Login with NEAR",
+      recipient: "swap-defuse.near",
+      nonce: expect.any(Buffer),
+    });
 
     actor.stop();
   });
-
-  it.skip("should periodically refetch quotes and update amount_out", async () => {
-    const mockQuoteService =
-      new IntentProcessorServiceMock().fetchQuotesAndEmulatePolling(1000);
-    const actor = createActor(
-      swapMachine.provide({
-        actors: {
-          fetchQuotes: mockQuoteService,
-        },
-      }),
-    ).start();
-    const quoteResults: string[] = [];
-
-    // Set initial intent
-    actor.send({
-      type: "SET_INTENT",
-      intent: mockQuote,
-    });
-
-    // Subscribe to state changes
-    actor.subscribe((state) => {
-      if (state.context.quotes.length > 0) {
-        quoteResults.push(state.context.quotes[0].amount_out);
-        console.log("New quote received:", state.context.quotes[0].amount_out);
-      }
-    });
-
-    // Wait for 3 unique quotes or a maximum of 6 polling cycles
-    console.log("Waiting for quotes...");
-    for (let i = 0; i < 6; i++) {
-      await sleep(5000);
-      console.log(
-        `Waited ${(i + 1) * 5} seconds. Quotes received: ${quoteResults.length}`,
-      );
-
-      // Check if we have 3 unique quotes
-      const uniqueQuotes = [...new Set(quoteResults)];
-      if (uniqueQuotes.length >= 3) {
-        break;
-      }
-    }
-
-    // Filter out duplicate quotes
-    const uniqueQuotes = quoteResults.filter(
-      (quote, index, self) => index === 0 || quote !== self[index - 1],
-    );
-
-    // Check if we have at least 3 unique quotes
-    expect(uniqueQuotes.length).toBeGreaterThanOrEqual(3);
-
-    // Check if the unique quotes are increasing
-    for (let i = 1; i < uniqueQuotes.length; i++) {
-      expect(parseInt(uniqueQuotes[i])).toBeGreaterThan(
-        parseInt(uniqueQuotes[i - 1]),
-      );
-    }
-
-    actor.stop();
-  }, 35000); // Keep the timeout at 35 seconds for safety
 
   it.skip("should transition to Submitting state on swap submission", async () => {
     const actor = createActor(swapMachine).start();

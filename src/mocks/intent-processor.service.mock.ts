@@ -27,4 +27,12 @@ export class IntentProcessorServiceMock {
       },
     ];
   }
+
+  async prepareSignMessage(input: any): Promise<any> {
+    return {
+      message: "Login with NEAR",
+      recipient: "swap-defuse.near",
+      nonce: Buffer.from("mockedNonce"),
+    };
+  }
 }
