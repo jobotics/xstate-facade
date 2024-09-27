@@ -7,7 +7,6 @@ import {
   SolverQuote,
   SubmitIntentResult,
   TransactionMethodEnum,
-  SwapMessageParams,
 } from "../interfaces/swap-machine.in.interface";
 import {
   mapAssetKey,
@@ -17,6 +16,7 @@ import {
   Context,
   Input,
   QuoteParams,
+  SwapMessageParams,
 } from "../interfaces/swap-machine.ex.interface";
 import { ApiService } from "./api.service";
 import parseDefuseAsset, { generateIntentId } from "../utils/utils";

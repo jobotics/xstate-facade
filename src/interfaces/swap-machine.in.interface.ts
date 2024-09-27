@@ -110,14 +110,6 @@ export type SolverQuote = {
   };
 };
 
-export type SwapMessageParams = {
-  message: string;
-  recipient: string;
-  nonce: Buffer;
-  callbackUrl?: string;
-  state?: string;
-};
-
 export type ParseDefuseAssetResult = {
   blockchain: string;
   network: string;
