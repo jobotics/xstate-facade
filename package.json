@@ -1,5 +1,5 @@
 {
-  "name": "xstate-swap-machine",
+  "name": "@defuse/swap-facade",
   "version": "1.0.0",
   "description": "XState implementation of a swap machine",
   "main": "src/index.js",

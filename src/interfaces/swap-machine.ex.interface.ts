@@ -1,8 +1,4 @@
-import {
-  Intent,
-  SolverQuote,
-  SwapMessageParams,
-} from "./swap-machine.in.interface";
+import { Intent, SolverQuote } from "./swap-machine.in.interface";
 
 // TODO : refactor this description
 /**
@@ -56,4 +52,12 @@ export type Quote = SolverQuote;
 
 export type TransactionEntity = {
   hash: string;
+};
+
+export type SwapMessageParams = {
+  message: string;
+  recipient: string;
+  nonce: Buffer;
+  callbackUrl?: string;
+  state?: string;
 };
